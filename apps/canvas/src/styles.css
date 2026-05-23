@@ -1,0 +1,65 @@
+/* Design system v0 — anchored to the design doc.
+ * Self-hosted woff2 replaces these CDN imports in production; index.html
+ * uses Fontshare + Google for the prototype. */
+
+:root {
+	--surface: #FAFAFA;
+	--surface-elev: #FFFFFF;
+	--border: #E4E4E7;
+	--text-strong: #18181B;
+	--text-muted: #71717A;
+	--accent: #374151;
+	--status-succ: #059669;
+	--status-await: #F59E0B;
+	--status-fail: #DC2626;
+	--status-unreach: #71717A;
+
+	--radius-sm: 4px;
+	--radius-md: 8px;
+	--radius-lg: 12px;
+
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 24px;
+	--space-6: 32px;
+	--space-7: 48px;
+
+	--ease-default: cubic-bezier(0.2, 0, 0, 1);
+	--motion-chip: 150ms;
+	--motion-card: 300ms;
+	--motion-pan: 600ms;
+
+	--font-display: 'Switzer', ui-sans-serif, system-ui, sans-serif;
+	--font-ui: 'Switzer', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	font-family: var(--font-ui);
+	color: var(--text-strong);
+	background: var(--surface);
+	height: 100vh;
+	overflow: hidden;
+}
+
+#root {
+	display: grid;
+	grid-template-rows: auto 1fr;
+	height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		animation-duration: 0ms !important;
+		transition-duration: 0ms !important;
+	}
+}
