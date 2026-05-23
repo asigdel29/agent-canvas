@@ -14,6 +14,7 @@ import type {
 	NormalizedWebhookEvent,
 	ProviderAdapter,
 	StartRunRequest,
+	VendorRunInfo,
 	VendorRunStatus,
 	VendorRunStatusReport,
 	WebhookFramework,
@@ -75,6 +76,31 @@ export class MockProvider implements ProviderAdapter {
 		const status = this.statusScript[idx] ?? 'running'
 		this.statusCursor += 1
 		return { run_id, status, last_observed_at: new Date().toISOString() }
+	}
+
+	/**
+	 * Mock payload shape: { vendor_run_id, event_kind, ...rest }.
+	 * Real adapters parse the vendor's actual schema.
+	 */
+	extractRunInfo(event: NormalizedWebhookEvent): VendorRunInfo | null {
+		const p = event.payload as { vendor_run_id?: string; event_kind?: string }
+		if (typeof p.vendor_run_id !== 'string') return null
+		const kind = p.event_kind as VendorRunInfo['event_kind'] | undefined
+		const allowed: ReadonlyArray<VendorRunInfo['event_kind']> = [
+			'queued',
+			'provisioning',
+			'running',
+			'awaiting_input',
+			'progress',
+			'tool_call',
+			'approval_request',
+			'succeeded',
+			'failed',
+			'cancelled',
+			'unreachable',
+		]
+		if (!kind || !allowed.includes(kind)) return null
+		return { vendor_run_id: p.vendor_run_id, event_kind: kind, payload: event.payload }
 	}
 }
 

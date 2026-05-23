@@ -184,6 +184,36 @@ export interface ProviderAdapter {
 
 	/** Webhook framework specific to this vendor's webhook protocol. */
 	readonly webhook: WebhookFramework
+
+	/**
+	 * Translate a normalized webhook event into a vendor-run signal.
+	 * Returns null if the event is not a per-run update (e.g., vendor
+	 * health pings, billing notifications). The orchestrator's
+	 * ingestion pipeline routes the signal to the corresponding
+	 * internal run via the VendorRunMap.
+	 */
+	extractRunInfo(event: NormalizedWebhookEvent): VendorRunInfo | null
+}
+
+/**
+ * What an adapter extracts from a per-run webhook event. `vendor_run_id`
+ * keys the map back to the orchestrator's internal RunId.
+ */
+export interface VendorRunInfo {
+	readonly vendor_run_id: string
+	readonly event_kind:
+		| 'queued'
+		| 'provisioning'
+		| 'running'
+		| 'awaiting_input'
+		| 'progress'
+		| 'tool_call'
+		| 'approval_request'
+		| 'succeeded'
+		| 'failed'
+		| 'cancelled'
+		| 'unreachable'
+	readonly payload: Readonly<Record<string, unknown>>
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -73,6 +73,7 @@ const mockProvider: ProviderAdapter = {
 		last_observed_at: new Date().toISOString(),
 	}),
 	webhook: mockWebhook,
+	extractRunInfo: () => null,
 }
 
 runConnectorConformance(mockConnector)

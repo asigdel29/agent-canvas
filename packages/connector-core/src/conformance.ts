@@ -88,5 +88,9 @@ export function runProviderAdapterConformance(adapter: ProviderAdapter): void {
 			expect(typeof adapter.webhook.idempotencyKey).toBe('function')
 			expect(typeof adapter.webhook.normalize).toBe('function')
 		})
+
+		it('exposes extractRunInfo for the ingestion pipeline', () => {
+			expect(typeof adapter.extractRunInfo).toBe('function')
+		})
 	})
 }

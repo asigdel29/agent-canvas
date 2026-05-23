@@ -16,8 +16,10 @@
  */
 
 import type {
+	NormalizedWebhookEvent,
 	ProviderAdapter,
 	StartRunRequest,
+	VendorRunInfo,
 	VendorRunStatusReport,
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
@@ -80,5 +82,55 @@ export class CodexProvider implements ProviderAdapter {
 
 	async getStatus(_run_id: RunId): Promise<VendorRunStatusReport> {
 		throw new NotImplementedError('codex.getStatus')
+	}
+
+	/**
+	 * Codex webhook payload shape (per the vendor's API docs):
+	 *
+	 *   { id, type, run: { id, status }, data? }
+	 *
+	 * `type` maps to our internal RunEventKind via the table below.
+	 */
+	extractRunInfo(event: NormalizedWebhookEvent): VendorRunInfo | null {
+		const p = event.payload as {
+			run?: { id?: string; status?: string }
+			data?: Record<string, unknown>
+		}
+		const vendor_run_id = p.run?.id
+		if (typeof vendor_run_id !== 'string') return null
+		const kind = codexEventTypeToKind(event.event_type)
+		if (!kind) return null
+		return {
+			vendor_run_id,
+			event_kind: kind,
+			payload: p.data ?? {},
+		}
+	}
+}
+
+function codexEventTypeToKind(t: string): VendorRunInfo['event_kind'] | null {
+	switch (t) {
+		case 'run.queued':
+			return 'queued'
+		case 'run.provisioning':
+			return 'provisioning'
+		case 'run.running':
+			return 'running'
+		case 'run.awaiting_input':
+			return 'awaiting_input'
+		case 'run.progress':
+			return 'progress'
+		case 'run.tool_call':
+			return 'tool_call'
+		case 'run.approval_request':
+			return 'approval_request'
+		case 'run.succeeded':
+			return 'succeeded'
+		case 'run.failed':
+			return 'failed'
+		case 'run.cancelled':
+			return 'cancelled'
+		default:
+			return null
 	}
 }

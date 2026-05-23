@@ -9,8 +9,10 @@
  */
 
 import type {
+	NormalizedWebhookEvent,
 	ProviderAdapter,
 	StartRunRequest,
+	VendorRunInfo,
 	VendorRunStatusReport,
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
@@ -74,5 +76,56 @@ export class OpenHandsProvider implements ProviderAdapter {
 
 	async getStatus(_run_id: RunId): Promise<VendorRunStatusReport> {
 		throw new NotImplementedError('openhands.getStatus')
+	}
+
+	/**
+	 * OpenHands webhook payload shape:
+	 *
+	 *   { conversation: { id, state }, event: { type, data } }
+	 *
+	 * `event.type` maps to RunEventKind. `conversation.id` is the
+	 * OpenHands-side run identifier.
+	 */
+	extractRunInfo(event: NormalizedWebhookEvent): VendorRunInfo | null {
+		const p = event.payload as {
+			conversation?: { id?: string; state?: string }
+			event?: { type?: string; data?: Record<string, unknown> }
+		}
+		const vendor_run_id = p.conversation?.id
+		if (typeof vendor_run_id !== 'string') return null
+		const kind = openHandsEventTypeToKind(p.event?.type)
+		if (!kind) return null
+		return {
+			vendor_run_id,
+			event_kind: kind,
+			payload: p.event?.data ?? {},
+		}
+	}
+}
+
+function openHandsEventTypeToKind(t: string | undefined): VendorRunInfo['event_kind'] | null {
+	switch (t) {
+		case 'conversation.queued':
+			return 'queued'
+		case 'conversation.starting':
+			return 'provisioning'
+		case 'conversation.running':
+			return 'running'
+		case 'conversation.awaiting_user':
+			return 'awaiting_input'
+		case 'conversation.progress':
+			return 'progress'
+		case 'conversation.tool_use':
+			return 'tool_call'
+		case 'conversation.approval_needed':
+			return 'approval_request'
+		case 'conversation.completed':
+			return 'succeeded'
+		case 'conversation.failed':
+			return 'failed'
+		case 'conversation.cancelled':
+			return 'cancelled'
+		default:
+			return null
 	}
 }
