@@ -1,0 +1,22 @@
+{
+  "name": "@agent-canvas/orchestrator",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Backend orchestrator: command endpoint, event log, projector, reconciler, vault, billing gate, input sanitizer.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty",
+    "test": "vitest run",
+    "eval": "vitest run --config evals/vitest.config.ts"
+  },
+  "dependencies": {
+    "@agent-canvas/connector-core": "*",
+    "@agent-canvas/orchestrator-types": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

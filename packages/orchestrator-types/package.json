@@ -1,0 +1,25 @@
+{
+  "name": "@agent-canvas/orchestrator-types",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Zero-runtime domain types for the agent orchestrator: Run state machine, event log, projector contracts, commands, audit, pure fold helpers.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
