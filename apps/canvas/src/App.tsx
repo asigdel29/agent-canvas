@@ -42,16 +42,29 @@ export function App() {
 		if (typeof window === 'undefined') return null
 		const params = new URLSearchParams(window.location.search)
 		const room = params.get('room')
-		const token = params.get('token')
-		if (!room || !token) return null
-		return { room, token }
+		const session = params.get('session')
+		if (!room || !session) return null
+		return { room, session }
 	}, [])
 
 	useEffect(() => {
 		if (!realtime) return
 		const client = new RoomEventClient({
 			url: `${ORCHESTRATOR_URL}/api/sync/${encodeURIComponent(realtime.room)}`,
-			token: realtime.token,
+			tokenFactory: async () => {
+				const res = await fetch(`${ORCHESTRATOR_URL}/api/auth/sse-token`, {
+					method: 'POST',
+					credentials: 'include',
+					headers: {
+						authorization: `Bearer ${realtime.session}`,
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify({ room_id: realtime.room }),
+				})
+				if (!res.ok) throw new Error(`sse-token mint failed: ${res.status}`)
+				const body = (await res.json()) as { token: string }
+				return body.token
+			},
 			onEvent: (event) => {
 				setLiveEvents((prev) => {
 					const next = [...prev, event]

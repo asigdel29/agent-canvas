@@ -18,6 +18,7 @@ import {
 	CommandRejected,
 } from '../dist/orchestration/commandEndpoint.js'
 import { extractSession } from '../dist/auth/session.js'
+import { preflightResponse, withCorsHeaders } from '../dist/http/cors.js'
 import type { Command, UserId } from '@agent-canvas/orchestrator-types'
 
 export const config = {
@@ -25,20 +26,22 @@ export const config = {
 }
 
 export default async function handler(req: Request): Promise<Response> {
-	if (req.method !== 'POST') return jsonError(405, 'method_not_allowed')
+	const preflight = preflightResponse(req)
+	if (preflight) return preflight
+	if (req.method !== 'POST') return withCorsHeaders(req, jsonError(405, 'method_not_allowed'))
 
 	const secret = process.env['JWT_SECRET']
-	if (!secret) return jsonError(500, 'jwt_secret_not_configured')
+	if (!secret) return withCorsHeaders(req, jsonError(500, 'jwt_secret_not_configured'))
 
 	const session = extractSession(req, secret)
-	if (!session) return jsonError(401, 'unauthorized')
+	if (!session) return withCorsHeaders(req, jsonError(401, 'unauthorized'))
 
 	let rawCommand: Command
 	try {
 		const raw = await req.json()
 		rawCommand = raw as Command
 	} catch {
-		return jsonError(400, 'malformed_json')
+		return withCorsHeaders(req, jsonError(400, 'malformed_json'))
 	}
 
 	// Server-side trust: actor_user_id comes from the verified session,
@@ -51,19 +54,25 @@ export default async function handler(req: Request): Promise<Response> {
 
 	try {
 		const result = await endpoint.accept(command, traceparent)
-		return new Response(JSON.stringify(result), {
-			status: 200,
-			headers: {
-				'content-type': 'application/json',
-				traceparent: result.trace_id,
-			},
-		})
+		return withCorsHeaders(
+			req,
+			new Response(JSON.stringify(result), {
+				status: 200,
+				headers: {
+					'content-type': 'application/json',
+					traceparent: result.trace_id,
+				},
+			})
+		)
 	} catch (err) {
 		if (err instanceof CommandRejected) {
-			return jsonError(httpStatusForRejection(err.reason), err.reason, err.message)
+			return withCorsHeaders(
+				req,
+				jsonError(httpStatusForRejection(err.reason), err.reason, err.message)
+			)
 		}
 		const msg = err instanceof Error ? err.message : 'internal_error'
-		return jsonError(500, 'internal_error', msg)
+		return withCorsHeaders(req, jsonError(500, 'internal_error', msg))
 	}
 }
 

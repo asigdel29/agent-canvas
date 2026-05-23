@@ -2,20 +2,20 @@
  * GET /api/sync/:room — Server-Sent Events stream of orchestration
  * events for one room.
  *
- * The canvas client opens an EventSource against this endpoint and
- * receives every run event the orchestrator writes to the room. Auth
- * uses a JWT in the `?token=` query param because EventSource does
- * not let the client set Authorization headers.
+ * Auth: ephemeral SSE token in `?token=` (mint via POST /api/auth/sse-token).
+ * Tokens are 60-second, single-use, room-scoped, HMAC'd with
+ * SSE_TOKEN_SECRET. Long-lived session JWTs are NEVER accepted here —
+ * URL-borne tokens leak through CDN logs and Referer headers, so the
+ * exposure window is bounded by the TTL.
  *
  * The stream lives ~270 s before the orchestrator emits a `reconnect`
- * hint and closes; EventSource auto-reconnects from there. This dodges
- * Vercel's 300 s function-execution cap cleanly.
+ * hint and closes; the canvas mints a fresh SSE token and reconnects.
  */
 
 import { getRuntime } from '../../dist/index.js'
-import { extractSession } from '../../dist/auth/session.js'
-import { verifySession } from '../../dist/auth/jwt.js'
+import { SseTokenError, verifySseToken } from '../../dist/auth/sseToken.js'
 import { openSseEndpoint } from '../../dist/sync/sseEndpoint.js'
+import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import type { RoomId } from '@agent-canvas/orchestrator-types'
 
 export const config = {
@@ -23,42 +23,43 @@ export const config = {
 }
 
 export default async function handler(req: Request): Promise<Response> {
-	if (req.method !== 'GET') return jsonError(405, 'method_not_allowed')
+	const preflight = preflightResponse(req)
+	if (preflight) return preflight
+	if (req.method !== 'GET') return withCorsHeaders(req, jsonError(405, 'method_not_allowed'))
 
-	const secret = process.env['JWT_SECRET']
-	if (!secret) return jsonError(500, 'jwt_secret_not_configured')
+	const sseSecret = process.env['SSE_TOKEN_SECRET']
+	if (!sseSecret) return withCorsHeaders(req, jsonError(500, 'sse_token_secret_not_configured'))
 
 	const url = new URL(req.url)
 	const segments = url.pathname.split('/').filter(Boolean)
 	const room_id = segments[segments.length - 1] as RoomId | undefined
-	if (!room_id) return jsonError(404, 'missing_room')
+	if (!room_id) return withCorsHeaders(req, jsonError(404, 'missing_room'))
 
-	// EventSource supports either an Authorization header (when the
-	// browser permits it via fetch-based polyfills) or a token query
-	// param. Accept both.
-	let session = extractSession(req, secret)
-	if (!session) {
-		const token = url.searchParams.get('token')
-		if (token) {
-			try {
-				session = verifySession(token, secret)
-			} catch {
-				session = null
-			}
-		}
+	const token = url.searchParams.get('token')
+	if (!token) return withCorsHeaders(req, jsonError(401, 'missing_sse_token'))
+
+	const runtime = getRuntime() as unknown as {
+		roomEventBus?: import('../../dist/sync/roomEventBus.js').RoomEventBus
+		sseNonces?: import('../../dist/auth/sseToken.js').NonceCache
 	}
-	if (!session) return jsonError(401, 'unauthorized')
-
-	const runtime = getRuntime() as unknown as { roomEventBus?: import('../../dist/sync/roomEventBus.js').RoomEventBus }
 	const bus = runtime.roomEventBus
-	if (!bus) return jsonError(503, 'realtime_bus_not_initialized')
+	if (!bus) return withCorsHeaders(req, jsonError(503, 'realtime_bus_not_initialized'))
+	const nonceCache = runtime.sseNonces
+	if (!nonceCache) return withCorsHeaders(req, jsonError(500, 'sse_nonce_cache_not_initialized'))
+
+	try {
+		verifySseToken({ token, room_id, secret: sseSecret, nonceCache })
+	} catch (err) {
+		const reason = err instanceof SseTokenError ? err.reason : 'sse_token_invalid'
+		return withCorsHeaders(req, jsonError(401, reason))
+	}
 
 	const { response } = openSseEndpoint({
 		room_id,
 		bus,
 		abortSignal: req.signal,
 	})
-	return response
+	return withCorsHeaders(req, response)
 }
 
 function jsonError(status: number, code: string): Response {

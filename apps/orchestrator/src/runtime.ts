@@ -14,7 +14,8 @@
 
 import { ConnectorRegistry } from '@agent-canvas/connector-core'
 
-import { InMemoryAuditLog } from './orchestration/auditLog.js'
+import { InMemoryAuditLog, type AuditLog } from './orchestration/auditLog.js'
+import { NonceCache } from './auth/sseToken.js'
 import { IngestionPipeline } from './orchestration/ingestionPipeline.js'
 import { RunCoordinator } from './orchestration/runCoordinator.js'
 import { TriggerRouter } from './orchestration/triggerRouter.js'
@@ -83,6 +84,8 @@ export interface Runtime {
 	readonly roomEventBus: RoomEventBus
 	readonly templates: WorkflowTemplateStore
 	readonly triggerRouter: TriggerRouter
+	readonly auditLog: AuditLog
+	readonly sseNonces: NonceCache
 }
 
 let cached: Runtime | null = null
@@ -190,6 +193,8 @@ function build(): Runtime {
 		resolveRoomForTrigger: async () => null,
 	})
 
+	const sseNonces = new NonceCache(10_000)
+
 	return {
 		registry,
 		endpoint,
@@ -201,5 +206,7 @@ function build(): Runtime {
 		roomEventBus,
 		templates,
 		triggerRouter,
+		auditLog,
+		sseNonces,
 	}
 }

@@ -51,7 +51,34 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const wrappedReq: WebhookRequest = { headers, body }
 	const valid = await adapter.webhook.verifySignature(wrappedReq, secret)
-	if (!valid) return jsonError(401, 'invalid_signature')
+	if (!valid) {
+		// Record failed verifications. A burst of these is the canonical
+		// signal of a rotated-but-not-redistributed secret OR an attacker
+		// probing for unprotected endpoints. Best-effort: failures of the
+		// audit write itself must NEVER mask the 401.
+		try {
+			const { auditLog } = getRuntime() as unknown as {
+				auditLog?: import('../../dist/orchestration/auditLog.js').AuditLog
+			}
+			if (auditLog) {
+				const ua = req.headers.get('user-agent') ?? 'unknown'
+				const sourceIp =
+					req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
+				await auditLog.record({
+					actor_user_id: 'anon_webhook' as never,
+					room_id: 'system' as never,
+					run_id: null,
+					action: 'webhook_signature_failed',
+					result: 'rejected',
+					trace_id: req.headers.get('traceparent') ?? 'na',
+					details: { provider, source_ip: sourceIp, user_agent: ua },
+				})
+			}
+		} catch {
+			// swallow — the 401 below is the contract
+		}
+		return jsonError(401, 'invalid_signature')
+	}
 
 	const normalized = adapter.webhook.normalize(wrappedReq)
 
