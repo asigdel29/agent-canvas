@@ -55,12 +55,25 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const normalized = adapter.webhook.normalize(wrappedReq)
 
-	// Phase 1: the actual hand-off to the orchestrator's ingestion
-	// pipeline goes here — append to event_log under the matching run_id,
-	// enqueue to outbox, etc. That requires a webhook-to-run resolution
-	// step (typically a provider's payload includes some id we map to
-	// a run_id, or we maintain a delivery_to_run table). Wired in the
-	// next follow-up PR alongside the routes/run mapping.
+	// Connectors (third-party tools) deliver triggers; vendors (Codex,
+	// OpenHands) deliver run events. The IngestionPipeline only runs
+	// for vendor adapters; connector triggers route through a separate
+	// path (handled in a follow-up — they invoke CommandEndpoint with
+	// a start_request).
+	if (isVendorAdapter(registry, provider)) {
+		const vendor = registry.getProvider(provider as VendorId)
+		const { ingestionPipeline } = getRuntime()
+		const outcome = await ingestionPipeline.ingest(vendor, normalized)
+		return new Response(
+			JSON.stringify({
+				accepted: outcome.status === 'accepted',
+				outcome,
+				event_type: normalized.event_type,
+				idempotency_key: normalized.idempotency_key,
+			}),
+			{ status: 202, headers: { 'content-type': 'application/json' } }
+		)
+	}
 
 	return new Response(
 		JSON.stringify({
@@ -68,6 +81,7 @@ export default async function handler(req: Request): Promise<Response> {
 			provider,
 			event_type: normalized.event_type,
 			idempotency_key: normalized.idempotency_key,
+			note: 'trigger handling: follow-up PR',
 		}),
 		{ status: 202, headers: { 'content-type': 'application/json' } }
 	)
@@ -85,6 +99,18 @@ function tryGetAdapter(
 		} catch {
 			return null
 		}
+	}
+}
+
+function isVendorAdapter(
+	registry: ReturnType<typeof getRuntime>['registry'],
+	id: string
+): boolean {
+	try {
+		registry.getProvider(id as VendorId)
+		return true
+	} catch {
+		return false
 	}
 }
 

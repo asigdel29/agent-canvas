@@ -15,6 +15,9 @@
 import { ConnectorRegistry } from '@agent-canvas/connector-core'
 
 import { InMemoryAuditLog } from './orchestration/auditLog.js'
+import { IngestionPipeline } from './orchestration/ingestionPipeline.js'
+import { InMemoryVendorRunMap } from './orchestration/vendorRunMap.js'
+import { PostgresVendorRunMap } from './postgres/vendorRunMap.js'
 import {
 	BillingGate,
 	InMemoryBillingGateStore,
@@ -67,6 +70,8 @@ export interface Runtime {
 	readonly endpoint: CommandEndpoint
 	readonly safety: SafetyClassifier
 	readonly capabilities: CapabilityResolver
+	readonly ingestionPipeline: IngestionPipeline
+	readonly vendorRunMap: InMemoryVendorRunMap | PostgresVendorRunMap
 }
 
 let cached: Runtime | null = null
@@ -99,6 +104,7 @@ function build(): Runtime {
 		? new PostgresBillingGateStore(sql)
 		: new InMemoryBillingGateStore()
 	const outbox = sql ? new PostgresOutbox(sql) : new InMemoryOutbox()
+	const vendorRunMap = sql ? new PostgresVendorRunMap(sql) : new InMemoryVendorRunMap()
 
 	const billingGate = process.env['BILLING_ENABLED'] === 'true' ? new BillingGate(billingStore) : null
 
@@ -145,6 +151,7 @@ function build(): Runtime {
 	}
 
 	const safety = new SafetyClassifier(registry)
+	const ingestionPipeline = new IngestionPipeline({ vendorRunMap, eventLog, outbox })
 
-	return { registry, endpoint, safety, capabilities }
+	return { registry, endpoint, safety, capabilities, ingestionPipeline, vendorRunMap }
 }
