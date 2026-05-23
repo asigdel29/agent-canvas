@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/orchestrator-types" },
     { "path": "./packages/connector-core" },
-    { "path": "./apps/orchestrator" }
+    { "path": "./apps/orchestrator" },
+    { "path": "./apps/canvas" }
   ]
 }
