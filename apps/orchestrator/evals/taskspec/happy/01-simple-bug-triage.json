@@ -1,0 +1,14 @@
+{
+  "input": {
+    "goal": "Triage the issues labeled 'bug' in linear, set high priority on anything affecting onboarding, and post a summary to #eng on Slack.",
+    "source": "user_typed",
+    "actor_user_id": "user_test_anu",
+    "room_id": "room_test_1"
+  },
+  "expected_shape": {
+    "required_fields": ["objective", "required_tools", "destructive_actions", "untrusted_context"],
+    "required_tools_include": ["linear.list_issues", "linear.update_issue", "slack.post_message"],
+    "destructive_actions_empty": true,
+    "untrusted_context_empty": true
+  }
+}

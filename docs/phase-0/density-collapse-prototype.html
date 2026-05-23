@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Phase 0 — density-adaptive event-graph collapse prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Switzer + IBM Plex Mono — woff2 self-host would replace these CDN links in real product */
+    @import url('https://api.fontshare.com/v2/css?f[]=switzer@400,500,700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+    :root {
+      --surface: #FAFAFA;
+      --surface-elev: #FFFFFF;
+      --border: #E4E4E7;
+      --text-strong: #18181B;
+      --text-muted: #71717A;
+      --accent: #374151;
+      --status-succ: #059669;
+      --status-await: #F59E0B;
+      --status-fail: #DC2626;
+      --status-unreach: #71717A;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'Switzer', ui-sans-serif, system-ui, sans-serif;
+      color: var(--text-strong);
+      background: var(--surface);
+      height: 100vh; overflow: hidden;
+    }
+    body { display: grid; grid-template-rows: auto 1fr auto; }
+
+    /* Top chrome: connector strip (left) + spend banner space (right is in canvas) */
+    .chrome {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-elev);
+    }
+    .connector-strip { display: flex; gap: 8px; align-items: center; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 13px; background: var(--surface-elev);
+    }
+    .chip .dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--status-succ);
+    }
+    .controls { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+    .controls label { color: var(--text-muted); }
+    .controls input[type="range"] { width: 140px; }
+
+    /* Canvas surface */
+    .canvas {
+      position: relative; overflow: hidden;
+      background:
+        radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 16px 16px;
+    }
+    .agents { position: absolute; inset: 0; padding: 24px; display: grid; gap: 16px; align-content: start; }
+
+    /* Spend banner (bottom-right) */
+    .spend {
+      position: absolute; bottom: 12px; right: 12px;
+      padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface-elev); font-size: 12px; color: var(--text-muted);
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    }
+
+    /* Approval inbox stack (top-right) */
+    .inbox {
+      position: absolute; top: 12px; right: 12px;
+      width: 280px; max-height: calc(100% - 80px); overflow-y: auto;
+      display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none; /* presence-style; cards inside catch clicks */
+    }
+    .inbox .card {
+      pointer-events: auto;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;
+      background: var(--surface-elev); box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      font-size: 13px;
+    }
+    .inbox .card header { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .inbox .card .label { font-weight: 500; color: var(--text-strong); }
+    .inbox .card .actions { display: flex; gap: 6px; margin-top: 8px; }
+    .inbox .card button {
+      flex: 1; padding: 6px 10px; font: inherit; font-size: 12px;
+      border: 1px solid var(--border); border-radius: 6px; background: var(--surface-elev); cursor: pointer;
+    }
+    .inbox .card button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    .inbox-count {
+      pointer-events: auto; align-self: flex-end;
+      font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px;
+      background: var(--surface-elev); color: var(--text-muted);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    /* Agent shape — FULL (event-graph) */
+    .agent-full {
+      border: 1px solid var(--border); border-radius: 12px;
+      background: var(--surface-elev); padding: 12px 14px;
+      max-width: 480px;
+    }
+    .agent-full.active { border: 2px solid var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .agent-full header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .agent-full .title { font-weight: 500; font-size: 14px; }
+    .agent-full .meta { display: flex; gap: 6px; font-size: 11px; color: var(--text-muted); align-items: center; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500;
+      background: rgba(0,0,0,0.04); color: var(--text-muted);
+    }
+    .badge.succ { background: rgba(5,150,105,0.08); color: var(--status-succ); }
+    .badge.await { background: rgba(245,158,11,0.08); color: var(--status-await); }
+    .badge.run { background: rgba(0,0,0,0.06); color: var(--text-strong); }
+    .badge.fail { background: rgba(220,38,38,0.08); color: var(--status-fail); }
+
+    .event-graph { margin-top: 10px; display: grid; gap: 4px; padding-left: 14px; border-left: 1px dashed var(--border); }
+    .event {
+      display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-muted);
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    }
+    .event::before { content: '·'; color: var(--border); margin-right: -4px; }
+    .event.tool { color: var(--text-strong); }
+    .event.approval-pending { color: var(--status-await); }
+
+    /* Agent shape — COMPACT (density-collapsed) */
+    .agent-compact {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface-elev); font-size: 13px;
+      max-width: 320px; cursor: pointer;
+    }
+    .agent-compact.active { border: 2px solid var(--accent); padding: 7px 11px; }
+    .agent-compact .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .agent-compact .seq { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-muted); }
+
+    /* Footer: prototype notes */
+    .footer {
+      padding: 8px 16px; border-top: 1px solid var(--border); background: var(--surface-elev);
+      font-size: 12px; color: var(--text-muted);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="chrome">
+    <div class="connector-strip">
+      <span class="chip"><span class="dot"></span>GitHub</span>
+      <span class="chip"><span class="dot"></span>Linear</span>
+      <span class="chip"><span class="dot"></span>Slack</span>
+      <span class="chip"><span class="dot" style="background:var(--status-await)"></span>Vercel</span>
+    </div>
+    <div class="controls">
+      <label for="n">Concurrent agents:</label>
+      <input id="n" type="range" min="1" max="10" value="3" />
+      <span id="n-val" style="font-family:'IBM Plex Mono',monospace; min-width:24px;">3</span>
+      <label for="th" style="margin-left:16px;">Threshold N:</label>
+      <input id="th" type="range" min="1" max="6" value="3" />
+      <span id="th-val" style="font-family:'IBM Plex Mono',monospace; min-width:24px;">3</span>
+    </div>
+  </div>
+
+  <div class="canvas">
+    <div id="agents" class="agents"></div>
+    <div class="inbox">
+      <span class="inbox-count" id="inbox-count">0 pending</span>
+      <div id="inbox-cards"></div>
+    </div>
+    <div class="spend">$3.42 / $50.00 today</div>
+  </div>
+
+  <div class="footer">
+    Density-adaptive collapse rule: if visible agents > <code>N</code>, all auto-compact.
+    Click a compact card to force-expand one. <em>Phase 0 prototype — validates the readability bet from design review (decision 34).</em>
+  </div>
+
+  <script type="module">
+    // -------------------------------------------------------------
+    // Mocked agent runs. Each "agent" has a parent label + a list of
+    // event-graph children (tool_call / progress / approval_request).
+    // -------------------------------------------------------------
+    const agents = [
+      { id: 'a1', title: 'PR #4521 · add user export', status: 'run', active: true,
+        events: ['github.create_branch', 'github.write_file: src/export.ts', 'github.write_file: src/export.test.ts', 'github.run_tests', 'vercel.preview_deploy', '⚠ approval: vercel deploy --prod'] },
+      { id: 'a2', title: 'Triage label:bug issues', status: 'succ', active: false,
+        events: ['linear.list_issues label=bug', 'linear.update id=ENG-481 priority=high', 'slack.notify #eng'] },
+      { id: 'a3', title: 'Sync Linear ↔ GitHub project board', status: 'await', active: false,
+        events: ['linear.list_projects', 'github.list_projects', '✗ github token expired — reconnect'] },
+      { id: 'a4', title: 'Daily standup digest', status: 'run', active: false,
+        events: ['slack.list_messages #eng since:24h', 'linear.list_recent_updates'] },
+      { id: 'a5', title: 'Refactor: extract auth middleware', status: 'run', active: false,
+        events: ['github.read_file: src/middleware/auth.ts', 'github.write_file: src/middleware/auth.ts'] },
+      { id: 'a6', title: 'Backfill onboarding emails', status: 'run', active: false,
+        events: ['supabase.query users WHERE created_at > :date', 'slack.notify #growth'] },
+      { id: 'a7', title: 'Investigate p99 spike', status: 'await', active: false,
+        events: ['vercel.read_metrics', '⚠ approval: query production database'] },
+      { id: 'a8', title: 'Generate weekly changelog', status: 'succ', active: false,
+        events: ['github.list_merged_prs since:7d', 'linear.list_closed_issues since:7d'] },
+      { id: 'a9', title: 'Patch CVE-2026-1234 in deps', status: 'run', active: false,
+        events: ['github.update_dependencies', 'github.run_tests', 'vercel.preview_deploy'] },
+      { id: 'a10', title: 'Customer ticket triage', status: 'fail', active: false,
+        events: ['zendesk.list_open', 'linear.create_issue', '✗ failed: Linear API 429'] },
+    ]
+
+    const nInput = document.getElementById('n')
+    const thInput = document.getElementById('th')
+    const nVal = document.getElementById('n-val')
+    const thVal = document.getElementById('th-val')
+    const grid = document.getElementById('agents')
+    const inboxCards = document.getElementById('inbox-cards')
+    const inboxCount = document.getElementById('inbox-count')
+
+    // Per-agent expand-overrides (Map<id, boolean>) — click compact card to expand one
+    const expandOverride = new Map()
+
+    function render() {
+      const n = Number(nInput.value)
+      const threshold = Number(thInput.value)
+      nVal.textContent = String(n)
+      thVal.textContent = String(threshold)
+
+      const visible = agents.slice(0, n)
+      const densityCompact = visible.length > threshold
+
+      grid.innerHTML = ''
+      grid.style.gridTemplateColumns = densityCompact ? 'repeat(auto-fill, minmax(320px, 1fr))' : '1fr'
+
+      for (const agent of visible) {
+        const forceExpand = expandOverride.get(agent.id) === true
+        const compact = densityCompact && !forceExpand
+
+        if (compact) {
+          const el = document.createElement('div')
+          el.className = 'agent-compact' + (agent.active ? ' active' : '')
+          el.innerHTML = `
+            <span>${statusBadge(agent.status)}</span>
+            <span class="title">${escapeHtml(agent.title)}</span>
+            <span class="seq">${agent.events.length} events</span>
+          `
+          el.addEventListener('click', () => {
+            expandOverride.set(agent.id, true)
+            render()
+          })
+          grid.appendChild(el)
+        } else {
+          const el = document.createElement('div')
+          el.className = 'agent-full' + (agent.active ? ' active' : '')
+          el.innerHTML = `
+            <header>
+              <div class="title">${escapeHtml(agent.title)}</div>
+              <div class="meta">
+                ${statusBadge(agent.status)}
+                <span>· run by <strong>Anu</strong></span>
+              </div>
+            </header>
+            <div class="event-graph">
+              ${agent.events.map((e) => `<div class="event ${eventClass(e)}">${escapeHtml(e)}</div>`).join('')}
+            </div>
+          `
+          // Click-to-collapse override toggle when expanded under density compact
+          if (densityCompact && forceExpand) {
+            el.style.cursor = 'pointer'
+            el.title = 'Click to re-collapse'
+            el.addEventListener('click', () => {
+              expandOverride.delete(agent.id)
+              render()
+            })
+          }
+          grid.appendChild(el)
+        }
+      }
+
+      // Approval inbox: collect pending approvals from visible agents
+      const pending = visible.flatMap((a) => a.events.filter((e) => e.startsWith('⚠')).map((e) => ({ id: a.id, title: a.title, e })))
+      inboxCount.textContent = `${pending.length} pending`
+      inboxCards.innerHTML = pending.map((p) => `
+        <div class="card">
+          <header><span class="label">${escapeHtml(p.title)}</span><span>now</span></header>
+          <div>${escapeHtml(p.e)}</div>
+          <div class="actions">
+            <button>Reject</button>
+            <button class="primary">Approve</button>
+          </div>
+        </div>
+      `).join('')
+    }
+
+    function statusBadge(s) {
+      const map = { run: ['Running', 'run'], succ: ['Succeeded', 'succ'], await: ['Awaiting', 'await'], fail: ['Failed', 'fail'] }
+      const [label, cls] = map[s] ?? ['Unknown', '']
+      return `<span class="badge ${cls}">${label}</span>`
+    }
+    function eventClass(e) {
+      if (e.startsWith('⚠')) return 'approval-pending'
+      if (e.startsWith('✗')) return ''
+      return 'tool'
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    }
+
+    nInput.addEventListener('input', render)
+    thInput.addEventListener('input', render)
+    render()
+  </script>
+</body>
+</html>

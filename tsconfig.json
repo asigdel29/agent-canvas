@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/orchestrator-types" },
+    { "path": "./packages/connector-core" },
+    { "path": "./apps/orchestrator" }
+  ]
+}
