@@ -9,7 +9,8 @@
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
-    "eval": "vitest run --config evals/vitest.config.ts"
+    "eval": "vitest run --config evals/vitest.config.ts",
+    "migrate": "node --import tsx ./src/postgres/migrate-cli.ts"
   },
   "dependencies": {
     "@agent-canvas/connector-core": "*",

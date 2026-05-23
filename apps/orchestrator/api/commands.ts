@@ -17,7 +17,8 @@ import { getRuntime } from '../dist/index.js'
 import {
 	CommandRejected,
 } from '../dist/orchestration/commandEndpoint.js'
-import type { Command } from '@agent-canvas/orchestrator-types'
+import { extractSession } from '../dist/auth/session.js'
+import type { Command, UserId } from '@agent-canvas/orchestrator-types'
 
 export const config = {
 	runtime: 'nodejs',
@@ -26,13 +27,24 @@ export const config = {
 export default async function handler(req: Request): Promise<Response> {
 	if (req.method !== 'POST') return jsonError(405, 'method_not_allowed')
 
-	let command: Command
+	const secret = process.env['JWT_SECRET']
+	if (!secret) return jsonError(500, 'jwt_secret_not_configured')
+
+	const session = extractSession(req, secret)
+	if (!session) return jsonError(401, 'unauthorized')
+
+	let rawCommand: Command
 	try {
 		const raw = await req.json()
-		command = raw as Command
+		rawCommand = raw as Command
 	} catch {
 		return jsonError(400, 'malformed_json')
 	}
+
+	// Server-side trust: actor_user_id comes from the verified session,
+	// never from the request body. A client trying to spoof
+	// actor_user_id is silently corrected to their real session sub.
+	const command: Command = { ...rawCommand, actor_user_id: session.sub as UserId }
 
 	const traceparent = req.headers.get('traceparent') ?? undefined
 	const { endpoint } = getRuntime()
