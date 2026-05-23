@@ -22,12 +22,42 @@ import type {
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
 import { verifyEd25519 } from '../_crypto.js'
+import { OAuthHelper, parseStandardTokenResponse, type FetchLike } from '../_oauth.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
+
+export interface DiscordConnectorOptions {
+	readonly clientId?: string
+	readonly clientSecret?: string
+	readonly scope?: string
+	readonly fetch?: FetchLike
+}
 
 export class DiscordConnector implements Connector {
 	readonly id: ProviderId = 'discord'
 	readonly display_name = 'Discord'
-	readonly oauth: OAuthFramework = stubOAuth
+	readonly oauth: OAuthFramework
+
+	constructor(opts: DiscordConnectorOptions = {}) {
+		const clientId = opts.clientId ?? process.env['DISCORD_OAUTH_CLIENT_ID']
+		const clientSecret = opts.clientSecret ?? process.env['DISCORD_OAUTH_CLIENT_SECRET']
+		if (clientId && clientSecret) {
+			this.oauth = new OAuthHelper({
+				config: {
+					clientId,
+					clientSecret,
+					scope: opts.scope ?? 'identify guilds bot applications.commands',
+					authorizeUrl: 'https://discord.com/oauth2/authorize',
+					tokenUrl: 'https://discord.com/api/oauth2/token',
+					revokeUrl: 'https://discord.com/api/oauth2/token/revoke',
+				},
+				providerKey: 'discord',
+				parseTokenResponse: parseStandardTokenResponse,
+				...(opts.fetch && { fetch: opts.fetch }),
+			})
+		} else {
+			this.oauth = stubOAuth
+		}
+	}
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'discord',
 		idempotencyKey: (req) => {
