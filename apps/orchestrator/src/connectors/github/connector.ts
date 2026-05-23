@@ -19,6 +19,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifyHmacSha256 } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class GitHubConnector implements Connector {
@@ -29,12 +30,14 @@ export class GitHubConnector implements Connector {
 		provider: 'github',
 		idempotencyKey: (req) =>
 			req.headers['x-github-delivery'] ?? req.headers['X-GitHub-Delivery'] ?? '',
-		verifySignature: async (_req, _secret) => {
-			// Real check: HMAC-SHA256(body, secret) compared to X-Hub-Signature-256
-			// header in constant time. Stub returns false to fail-closed until
-			// the real implementation lands.
-			return false
-		},
+		verifySignature: async (req, secret) =>
+			verifyHmacSha256({
+				secret,
+				body: req.body,
+				providedSignature:
+					req.headers['x-hub-signature-256'] ?? req.headers['X-Hub-Signature-256'],
+				prefix: 'sha256=',
+			}),
 		parseEventType: (req) =>
 			req.headers['x-github-event'] ?? req.headers['X-GitHub-Event'] ?? 'unknown',
 	})

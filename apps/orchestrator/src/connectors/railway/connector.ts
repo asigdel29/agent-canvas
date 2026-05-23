@@ -18,6 +18,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifyHmacSha256 } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class RailwayConnector implements Connector {
@@ -28,7 +29,13 @@ export class RailwayConnector implements Connector {
 		provider: 'railway',
 		idempotencyKey: (req) =>
 			req.headers['railway-delivery'] ?? req.headers['Railway-Delivery'] ?? 'railway_unknown',
-		verifySignature: async () => false,
+		verifySignature: async (req, secret) =>
+			verifyHmacSha256({
+				secret,
+				body: req.body,
+				providedSignature:
+					req.headers['railway-signature'] ?? req.headers['Railway-Signature'],
+			}),
 	})
 
 	readonly tools: readonly ToolDescriptor[] = [

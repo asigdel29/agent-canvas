@@ -20,6 +20,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifyHmacSha256 } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class LinearConnector implements Connector {
@@ -34,7 +35,12 @@ export class LinearConnector implements Connector {
 			// Legacy fallback: hash the body deterministically.
 			return `linear_hash_${djb2(req.body)}`
 		},
-		verifySignature: async () => false,
+		verifySignature: async (req, secret) =>
+			verifyHmacSha256({
+				secret,
+				body: req.body,
+				providedSignature: req.headers['linear-signature'] ?? req.headers['Linear-Signature'],
+			}),
 		parseEventType: (req) => req.headers['linear-event'] ?? 'unknown',
 	})
 

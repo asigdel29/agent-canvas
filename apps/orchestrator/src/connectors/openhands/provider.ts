@@ -15,6 +15,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { RunId, VendorId } from '@agent-canvas/orchestrator-types'
+import { verifyHmacSha256 } from '../_crypto.js'
 import { buildWebhook, NotImplementedError } from '../_stubs.js'
 
 export interface OpenHandsProviderOptions {
@@ -28,7 +29,13 @@ export class OpenHandsProvider implements ProviderAdapter {
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'openhands',
 		idempotencyKey: (req) => req.headers['x-openhands-delivery'] ?? 'openhands_unknown',
-		verifySignature: async () => false,
+		verifySignature: async (req, secret) =>
+			verifyHmacSha256({
+				secret,
+				body: req.body,
+				providedSignature: req.headers['x-openhands-signature'],
+				prefix: 'sha256=',
+			}),
 	})
 
 	private toolCache: { value: readonly string[]; expires_at_ms: number } | null = null

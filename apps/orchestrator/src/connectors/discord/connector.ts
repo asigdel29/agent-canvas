@@ -21,6 +21,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifyEd25519 } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class DiscordConnector implements Connector {
@@ -37,7 +38,15 @@ export class DiscordConnector implements Connector {
 				return 'discord_unparseable'
 			}
 		},
-		verifySignature: async () => false,
+		// For Discord, the "secret" is the application's public key (hex).
+		// Stored in the vault per-installation alongside the bot token.
+		verifySignature: async (req, publicKeyHex) =>
+			verifyEd25519({
+				publicKeyHex,
+				body: req.body,
+				timestamp: req.headers['x-signature-timestamp'],
+				providedSignatureHex: req.headers['x-signature-ed25519'],
+			}),
 		parseEventType: (req) => {
 			try {
 				const body = JSON.parse(req.body) as { type?: number }
