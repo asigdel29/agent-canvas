@@ -16,6 +16,7 @@ import { ConnectorRegistry } from '@agent-canvas/connector-core'
 
 import { InMemoryAuditLog } from './orchestration/auditLog.js'
 import { IngestionPipeline } from './orchestration/ingestionPipeline.js'
+import { RunCoordinator } from './orchestration/runCoordinator.js'
 import { InMemoryVendorRunMap } from './orchestration/vendorRunMap.js'
 import { PostgresVendorRunMap } from './postgres/vendorRunMap.js'
 import {
@@ -72,6 +73,7 @@ export interface Runtime {
 	readonly capabilities: CapabilityResolver
 	readonly ingestionPipeline: IngestionPipeline
 	readonly vendorRunMap: InMemoryVendorRunMap | PostgresVendorRunMap
+	readonly runCoordinator: RunCoordinator
 }
 
 let cached: Runtime | null = null
@@ -152,6 +154,16 @@ function build(): Runtime {
 
 	const safety = new SafetyClassifier(registry)
 	const ingestionPipeline = new IngestionPipeline({ vendorRunMap, eventLog, outbox })
+	const runCoordinator = new RunCoordinator({ registry, eventLog, outbox, vendorRunMap })
+	runCoordinator.start()
 
-	return { registry, endpoint, safety, capabilities, ingestionPipeline, vendorRunMap }
+	return {
+		registry,
+		endpoint,
+		safety,
+		capabilities,
+		ingestionPipeline,
+		vendorRunMap,
+		runCoordinator,
+	}
 }

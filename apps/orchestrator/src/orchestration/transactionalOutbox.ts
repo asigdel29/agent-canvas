@@ -34,6 +34,12 @@ export interface Outbox {
 	drain(opts?: { limit?: number }): Promise<readonly OutboxRow[]>
 	markDelivered(row_id: string): Promise<void>
 	pending(): Promise<number>
+	/**
+	 * Install a subscriber called on each drained event. Returns the
+	 * disposal hook (not all implementations support detachment;
+	 * production drops subscribers on instance restart).
+	 */
+	subscribe(s: Subscriber): void
 }
 
 export type Subscriber = (event: RunEvent) => Promise<void>
