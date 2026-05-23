@@ -17,8 +17,14 @@ import { ConnectorRegistry } from '@agent-canvas/connector-core'
 import { InMemoryAuditLog } from './orchestration/auditLog.js'
 import { IngestionPipeline } from './orchestration/ingestionPipeline.js'
 import { RunCoordinator } from './orchestration/runCoordinator.js'
+import { TriggerRouter } from './orchestration/triggerRouter.js'
 import { InMemoryVendorRunMap } from './orchestration/vendorRunMap.js'
+import {
+	InMemoryWorkflowTemplateStore,
+	type WorkflowTemplateStore,
+} from './orchestration/workflowTemplate.js'
 import { PostgresVendorRunMap } from './postgres/vendorRunMap.js'
+import { InMemoryRoomEventBus, type RoomEventBus } from './sync/roomEventBus.js'
 import {
 	BillingGate,
 	InMemoryBillingGateStore,
@@ -74,6 +80,9 @@ export interface Runtime {
 	readonly ingestionPipeline: IngestionPipeline
 	readonly vendorRunMap: InMemoryVendorRunMap | PostgresVendorRunMap
 	readonly runCoordinator: RunCoordinator
+	readonly roomEventBus: RoomEventBus
+	readonly templates: WorkflowTemplateStore
+	readonly triggerRouter: TriggerRouter
 }
 
 let cached: Runtime | null = null
@@ -157,6 +166,30 @@ function build(): Runtime {
 	const runCoordinator = new RunCoordinator({ registry, eventLog, outbox, vendorRunMap })
 	runCoordinator.start()
 
+	const roomEventBus = new InMemoryRoomEventBus()
+	// Fan out every drained event to the room bus via the projector's
+	// target resolver. The projector already routes events to rooms
+	// (origin + subscriptions); subscribing the bus alongside the
+	// projection sink piggybacks on that work.
+	outbox.subscribe(async (event) => {
+		const targets = await projectionResolver.getTargets(event.run_id)
+		for (const target of targets) {
+			if (await tombstones.isTombstoned(event.run_id, target.room_id)) continue
+			roomEventBus.publish(target.room_id, event)
+		}
+	})
+
+	const templates = new InMemoryWorkflowTemplateStore()
+	const triggerRouter = new TriggerRouter({
+		templates,
+		endpoint,
+		// Production wires this to a rooms table that maps a connector
+		// trigger (installation_id, channel_id, repo_id, etc.) to the
+		// owner's room. The default returns null — no routing happens
+		// until a real resolver is installed.
+		resolveRoomForTrigger: async () => null,
+	})
+
 	return {
 		registry,
 		endpoint,
@@ -165,5 +198,8 @@ function build(): Runtime {
 		ingestionPipeline,
 		vendorRunMap,
 		runCoordinator,
+		roomEventBus,
+		templates,
+		triggerRouter,
 	}
 }

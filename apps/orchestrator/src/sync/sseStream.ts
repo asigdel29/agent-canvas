@@ -1,9 +1,12 @@
 /**
  * Server-Sent Events stream helper.
  *
- * A small utility that wraps the Web Streams API into a clean SSE
- * envelope. Each event is sent as `data: <json>\n\n`. Keep-alive
- * comments fire every 25 s to defeat intermediary timeouts.
+ * Wraps the Web Streams API into a clean SSE envelope. Each event is
+ * sent as `data: <json>\n\n`. A keep-alive comment fires every 25 s
+ * to defeat intermediary timeouts. Closing the sender ends the stream
+ * and clears the keep-alive timer.
+ *
+ * Returns an SseSender + the Response to hand back to the runtime.
  */
 
 export interface SseSender {
@@ -13,43 +16,60 @@ export interface SseSender {
 	readonly response: Response
 }
 
-export function openSseStream(): SseSender {
-	let writer: WritableStreamDefaultWriter<Uint8Array> | null = null
+export interface OpenSseOptions {
+	readonly keepAliveMs?: number
+	/** Headers merged into the SSE response. */
+	readonly extraHeaders?: Readonly<Record<string, string>>
+}
+
+export function openSseStream(opts: OpenSseOptions = {}): SseSender {
 	const encoder = new TextEncoder()
+	let controller: ReadableStreamDefaultController<Uint8Array> | null = null
 	let closed = false
 	let keepAlive: ReturnType<typeof setInterval> | null = null
 
 	const body = new ReadableStream<Uint8Array>({
-		start(controller) {
-			writer = {
-				write: (chunk: Uint8Array) => {
-					controller.enqueue(chunk)
-					return Promise.resolve()
-				},
-				close: () => {
-					controller.close()
-					return Promise.resolve()
-				},
-				abort: () => Promise.resolve(),
-				releaseLock: () => {},
-				closed: Promise.resolve(undefined),
-				desiredSize: null,
-				ready: Promise.resolve(undefined),
-			} as unknown as WritableStreamDefaultWriter<Uint8Array>
+		start(c) {
+			controller = c
+		},
+		cancel() {
+			closed = true
+			if (keepAlive) {
+				clearInterval(keepAlive)
+				keepAlive = null
+			}
 		},
 	})
 
+	function writeRaw(chunk: string): void {
+		if (closed || !controller) return
+		try {
+			controller.enqueue(encoder.encode(chunk))
+		} catch {
+			closed = true
+		}
+	}
+
+	keepAlive = setInterval(() => {
+		writeRaw(': keep-alive\n\n')
+	}, opts.keepAliveMs ?? 25_000)
+
 	const sender: SseSender = {
 		send(data: unknown) {
-			if (closed || !writer) return
-			const payload = `data: ${JSON.stringify(data)}\n\n`
-			void writer.write(encoder.encode(payload))
+			writeRaw(`data: ${JSON.stringify(data)}\n\n`)
 		},
 		close() {
 			if (closed) return
 			closed = true
-			if (keepAlive) clearInterval(keepAlive)
-			if (writer) void writer.close()
+			if (keepAlive) {
+				clearInterval(keepAlive)
+				keepAlive = null
+			}
+			try {
+				controller?.close()
+			} catch {
+				// already closed downstream; ignore
+			}
 		},
 		get closed() {
 			return closed
@@ -60,16 +80,11 @@ export function openSseStream(): SseSender {
 				'content-type': 'text/event-stream',
 				'cache-control': 'no-cache, no-transform',
 				connection: 'keep-alive',
+				'x-accel-buffering': 'no',
+				...(opts.extraHeaders ?? {}),
 			},
 		}),
 	}
-
-	// Best-effort keep-alive. The SSE spec uses `:`-prefixed comments,
-	// which clients ignore but proxies treat as activity.
-	keepAlive = setInterval(() => {
-		if (closed || !writer) return
-		void writer.write(encoder.encode(': keep-alive\n\n'))
-	}, 25_000)
 
 	return sender
 }
