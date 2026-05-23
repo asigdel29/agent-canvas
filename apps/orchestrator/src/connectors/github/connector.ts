@@ -20,12 +20,44 @@ import type {
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
 import { verifyHmacSha256 } from '../_crypto.js'
+import { OAuthHelper, parseStandardTokenResponse, type FetchLike } from '../_oauth.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
+
+export interface GitHubConnectorOptions {
+	readonly clientId?: string
+	readonly clientSecret?: string
+	readonly scope?: string
+	readonly fetch?: FetchLike
+}
 
 export class GitHubConnector implements Connector {
 	readonly id: ProviderId = 'github'
 	readonly display_name = 'GitHub'
-	readonly oauth: OAuthFramework = stubOAuth
+	readonly oauth: OAuthFramework
+
+	constructor(opts: GitHubConnectorOptions = {}) {
+		const clientId = opts.clientId ?? process.env['GITHUB_OAUTH_CLIENT_ID']
+		const clientSecret = opts.clientSecret ?? process.env['GITHUB_OAUTH_CLIENT_SECRET']
+		if (clientId && clientSecret) {
+			this.oauth = new OAuthHelper({
+				config: {
+					clientId,
+					clientSecret,
+					scope: opts.scope ?? 'repo read:user',
+					authorizeUrl: 'https://github.com/login/oauth/authorize',
+					tokenUrl: 'https://github.com/login/oauth/access_token',
+					// GitHub's revoke endpoint uses Basic auth + DELETE; doesn't
+					// fit the standard form-encoded POST. Skip; the vault
+					// drops the cached tokens locally on disconnect.
+				},
+				providerKey: 'github',
+				parseTokenResponse: parseStandardTokenResponse,
+				...(opts.fetch && { fetch: opts.fetch }),
+			})
+		} else {
+			this.oauth = stubOAuth
+		}
+	}
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'github',
 		idempotencyKey: (req) =>
