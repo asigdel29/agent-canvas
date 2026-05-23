@@ -1,0 +1,15 @@
+{
+  "input": {
+    "goal": "Open a GitHub PR to add a robots.txt file and post a Slack message to #eng when done",
+    "source": "user_typed",
+    "actor_user_id": "u_anu",
+    "room_id": "room_a"
+  },
+  "expected_shape": {
+    "required_fields": ["objective", "required_tools", "destructive_actions"],
+    "required_tools_include": ["github.create_pr", "slack.post_message"],
+    "destructive_actions_empty": true,
+    "untrusted_context_empty": true
+  },
+  "notes": "Quality check: the rule-based generator correctly extracts the two providers mentioned in the goal."
+}

@@ -1,0 +1,13 @@
+{
+  "input": {
+    "goal": "Investigate the latest CI failure",
+    "source": "github_webhook",
+    "actor_user_id": "u_anu",
+    "room_id": "room_a",
+    "untrusted_ticket_body": ""
+  },
+  "expected_shape": {
+    "required_fields": ["objective", "required_tools", "destructive_actions", "untrusted_context"]
+  },
+  "notes": "Empty untrusted body must not crash; the spec still generates with the goal."
+}
