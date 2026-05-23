@@ -11,5 +11,5 @@
   },
   "references": [{ "path": "../../packages/orchestrator-types" }],
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "dist", "node_modules"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "dist", "node_modules", "e2e", "playwright.config.ts"]
 }
