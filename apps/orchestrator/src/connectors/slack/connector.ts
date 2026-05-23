@@ -21,13 +21,61 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import type { OAuthTokenSet } from '@agent-canvas/connector-core'
 import { verifySlack } from '../_crypto.js'
+import { OAuthHelper, type FetchLike } from '../_oauth.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
+
+export interface SlackConnectorOptions {
+	readonly clientId?: string
+	readonly clientSecret?: string
+	readonly scope?: string
+	readonly fetch?: FetchLike
+}
+
+/**
+ * Slack's OAuth v2 response is non-standard: { ok, access_token,
+ * authed_user, scope, team, ... }. `ok` signals success; `access_token`
+ * is the bot token, and `authed_user.access_token` would be the user
+ * token (we keep the bot token for bot-style actions).
+ */
+function parseSlackTokenResponse(json: Record<string, unknown>): OAuthTokenSet {
+	if (json['ok'] !== true) {
+		throw new Error(`slack oauth response not ok: ${String(json['error'] ?? 'unknown')}`)
+	}
+	const access_token = String(json['access_token'] ?? '')
+	if (!access_token) throw new Error('access_token missing in slack OAuth response')
+	const out: OAuthTokenSet = { access_token }
+	if (typeof json['scope'] === 'string') (out as { scope?: string }).scope = json['scope']
+	return out
+}
 
 export class SlackConnector implements Connector {
 	readonly id: ProviderId = 'slack'
 	readonly display_name = 'Slack'
-	readonly oauth: OAuthFramework = stubOAuth
+	readonly oauth: OAuthFramework
+
+	constructor(opts: SlackConnectorOptions = {}) {
+		const clientId = opts.clientId ?? process.env['SLACK_OAUTH_CLIENT_ID']
+		const clientSecret = opts.clientSecret ?? process.env['SLACK_OAUTH_CLIENT_SECRET']
+		if (clientId && clientSecret) {
+			this.oauth = new OAuthHelper({
+				config: {
+					clientId,
+					clientSecret,
+					scope: opts.scope ?? 'chat:write,channels:read,channels:history',
+					authorizeUrl: 'https://slack.com/oauth/v2/authorize',
+					tokenUrl: 'https://slack.com/api/oauth.v2.access',
+					revokeUrl: 'https://slack.com/api/auth.revoke',
+				},
+				providerKey: 'slack',
+				parseTokenResponse: parseSlackTokenResponse,
+				...(opts.fetch && { fetch: opts.fetch }),
+			})
+		} else {
+			this.oauth = stubOAuth
+		}
+	}
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'slack',
 		idempotencyKey: (req) => {
