@@ -24,6 +24,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifyHmacSha256 } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class SupabaseConnector implements Connector {
@@ -33,7 +34,12 @@ export class SupabaseConnector implements Connector {
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'supabase',
 		idempotencyKey: (req) => req.headers['x-supabase-delivery'] ?? 'supabase_unknown',
-		verifySignature: async () => false,
+		verifySignature: async (req, secret) =>
+			verifyHmacSha256({
+				secret,
+				body: req.body,
+				providedSignature: req.headers['x-supabase-signature'],
+			}),
 	})
 
 	readonly tools: readonly ToolDescriptor[] = [

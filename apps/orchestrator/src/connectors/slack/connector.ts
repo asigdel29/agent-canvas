@@ -21,6 +21,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifySlack } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class SlackConnector implements Connector {
@@ -43,7 +44,14 @@ export class SlackConnector implements Connector {
 			}
 			return `slack_${channel}_${ts}_${retry}`
 		},
-		verifySignature: async () => false,
+		verifySignature: async (req, secret) =>
+			verifySlack({
+				secret,
+				body: req.body,
+				timestamp: req.headers['x-slack-request-timestamp'],
+				providedSignature: req.headers['x-slack-signature'],
+				nowMs: Date.now(),
+			}),
 		parseEventType: (req) => {
 			try {
 				const body = JSON.parse(req.body) as { event?: { type?: string }; type?: string }

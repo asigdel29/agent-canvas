@@ -18,6 +18,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifyHmacSha256 } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class GraphiteConnector implements Connector {
@@ -28,7 +29,13 @@ export class GraphiteConnector implements Connector {
 		provider: 'graphite',
 		idempotencyKey: (req) =>
 			req.headers['graphite-delivery'] ?? req.headers['Graphite-Delivery'] ?? 'graphite_unknown',
-		verifySignature: async () => false,
+		verifySignature: async (req, secret) =>
+			verifyHmacSha256({
+				secret,
+				body: req.body,
+				providedSignature:
+					req.headers['graphite-signature'] ?? req.headers['Graphite-Signature'],
+			}),
 	})
 
 	readonly tools: readonly ToolDescriptor[] = [

@@ -19,6 +19,7 @@ import type {
 	WebhookFramework,
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { verifyHmacSha1 } from '../_crypto.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
 
 export class VercelConnector implements Connector {
@@ -28,7 +29,12 @@ export class VercelConnector implements Connector {
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'vercel',
 		idempotencyKey: (req) => req.headers['x-vercel-delivery'] ?? 'vercel_unknown',
-		verifySignature: async () => false,
+		verifySignature: async (req, secret) =>
+			verifyHmacSha1({
+				secret,
+				body: req.body,
+				providedSignature: req.headers['x-vercel-signature'],
+			}),
 	})
 
 	readonly tools: readonly ToolDescriptor[] = [
