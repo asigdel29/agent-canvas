@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@agent-canvas/connector-core": "*",
-    "@agent-canvas/orchestrator-types": "*"
+    "@agent-canvas/orchestrator-types": "*",
+    "postgres": "^3.4.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
