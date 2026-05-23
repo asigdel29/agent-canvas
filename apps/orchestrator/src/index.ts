@@ -17,3 +17,4 @@
  */
 
 export { applyTransition, NotImplementedError } from './orchestration/runStateMachine.js'
+export { getRuntime, resetRuntimeForTesting, type Runtime } from './runtime.js'
