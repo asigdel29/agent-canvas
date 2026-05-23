@@ -1,0 +1,113 @@
+/**
+ * GitHub connector.
+ *
+ * OAuth model: GitHub App installation. Tokens are installation tokens
+ * (~1 hour TTL, scoped via app permissions to specific repos). The
+ * orchestrator mints these per-run; long-lived secrets stay in the vault.
+ *
+ * Webhook idempotency: `X-GitHub-Delivery` header (UUID per delivery).
+ * Signature: HMAC-SHA256 with the app's webhook secret, sent as
+ * `X-Hub-Signature-256`.
+ */
+
+import type {
+	Connector,
+	OAuthFramework,
+	SinkDescriptor,
+	ToolDescriptor,
+	TriggerDescriptor,
+	WebhookFramework,
+} from '@agent-canvas/connector-core'
+import type { ProviderId } from '@agent-canvas/orchestrator-types'
+import { buildWebhook, stubOAuth } from '../_stubs.js'
+
+export class GitHubConnector implements Connector {
+	readonly id: ProviderId = 'github'
+	readonly display_name = 'GitHub'
+	readonly oauth: OAuthFramework = stubOAuth
+	readonly webhook: WebhookFramework = buildWebhook({
+		provider: 'github',
+		idempotencyKey: (req) =>
+			req.headers['x-github-delivery'] ?? req.headers['X-GitHub-Delivery'] ?? '',
+		verifySignature: async (_req, _secret) => {
+			// Real check: HMAC-SHA256(body, secret) compared to X-Hub-Signature-256
+			// header in constant time. Stub returns false to fail-closed until
+			// the real implementation lands.
+			return false
+		},
+		parseEventType: (req) =>
+			req.headers['x-github-event'] ?? req.headers['X-GitHub-Event'] ?? 'unknown',
+	})
+
+	readonly tools: readonly ToolDescriptor[] = [
+		{
+			id: 'create_pr',
+			name: 'Create pull request',
+			description: 'Open a pull request from a branch to a base.',
+			safety: 'safe',
+			input_schema: { type: 'object' },
+			output_schema: { type: 'object' },
+		},
+		{
+			id: 'write_file',
+			name: 'Write file',
+			description: 'Create or update a file on a branch.',
+			safety: 'safe',
+			input_schema: { type: 'object' },
+			output_schema: { type: 'object' },
+		},
+		{
+			id: 'comment_issue',
+			name: 'Comment on issue',
+			description: 'Add a comment to an issue or pull request.',
+			safety: 'safe',
+			input_schema: { type: 'object' },
+			output_schema: { type: 'object' },
+		},
+		{
+			id: 'run_tests',
+			name: 'Run tests',
+			description: 'Trigger the CI test workflow for a ref.',
+			safety: 'safe',
+			input_schema: { type: 'object' },
+			output_schema: { type: 'object' },
+		},
+		{
+			id: 'merge_pr',
+			name: 'Merge pull request',
+			description: 'Merge an open pull request.',
+			safety: 'destructive',
+			input_schema: { type: 'object' },
+			output_schema: { type: 'object' },
+		},
+		{
+			id: 'force_push',
+			name: 'Force-push',
+			description: 'Force-push to a branch, overwriting history.',
+			safety: 'irreversible',
+			input_schema: { type: 'object' },
+			output_schema: { type: 'object' },
+		},
+		{
+			id: 'delete_branch',
+			name: 'Delete branch',
+			description: 'Delete a branch.',
+			safety: 'destructive',
+			input_schema: { type: 'object' },
+			output_schema: { type: 'object' },
+		},
+	]
+
+	readonly triggers: readonly TriggerDescriptor[] = [
+		{ id: 'issue_opened', name: 'Issue opened', description: '', kind: 'webhook' },
+		{ id: 'pr_opened', name: 'PR opened', description: '', kind: 'webhook' },
+		{ id: 'pr_merged', name: 'PR merged', description: '', kind: 'webhook' },
+		{ id: 'check_failed', name: 'CI check failed', description: '', kind: 'webhook' },
+	]
+
+	readonly sinks: readonly SinkDescriptor[] = [
+		{ id: 'pr_comment', name: 'PR comment', description: '', safety: 'safe' },
+		{ id: 'issue_comment', name: 'Issue comment', description: '', safety: 'safe' },
+		{ id: 'check_run', name: 'Check run status', description: '', safety: 'safe' },
+	]
+}
