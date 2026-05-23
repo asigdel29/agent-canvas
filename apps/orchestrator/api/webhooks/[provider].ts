@@ -75,13 +75,18 @@ export default async function handler(req: Request): Promise<Response> {
 		)
 	}
 
+	// Connector trigger path: route through the workflow templates.
+	const { triggerRouter } = getRuntime()
+	const routed = await triggerRouter.route(provider as ProviderId, normalized)
 	return new Response(
 		JSON.stringify({
-			accepted: true,
+			accepted: routed.dispatched > 0,
 			provider,
 			event_type: normalized.event_type,
 			idempotency_key: normalized.idempotency_key,
-			note: 'trigger handling: follow-up PR',
+			matched_templates: routed.matched,
+			dispatched: routed.dispatched,
+			errors: routed.errors,
 		}),
 		{ status: 202, headers: { 'content-type': 'application/json' } }
 	)

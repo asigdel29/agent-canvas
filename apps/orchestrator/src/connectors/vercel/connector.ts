@@ -20,12 +20,43 @@ import type {
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
 import { verifyHmacSha1 } from '../_crypto.js'
+import { OAuthHelper, parseStandardTokenResponse, type FetchLike } from '../_oauth.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
+
+export interface VercelConnectorOptions {
+	readonly clientId?: string
+	readonly clientSecret?: string
+	readonly scope?: string
+	readonly fetch?: FetchLike
+}
 
 export class VercelConnector implements Connector {
 	readonly id: ProviderId = 'vercel'
 	readonly display_name = 'Vercel'
-	readonly oauth: OAuthFramework = stubOAuth
+	readonly oauth: OAuthFramework
+
+	constructor(opts: VercelConnectorOptions = {}) {
+		const clientId = opts.clientId ?? process.env['VERCEL_OAUTH_CLIENT_ID']
+		const clientSecret = opts.clientSecret ?? process.env['VERCEL_OAUTH_CLIENT_SECRET']
+		if (clientId && clientSecret) {
+			this.oauth = new OAuthHelper({
+				config: {
+					clientId,
+					clientSecret,
+					scope: opts.scope ?? '',
+					authorizeUrl: 'https://vercel.com/integrations/install',
+					tokenUrl: 'https://api.vercel.com/v2/oauth/access_token',
+					// No public revoke endpoint on the integrations API; users
+					// uninstall the integration from the Vercel dashboard.
+				},
+				providerKey: 'vercel',
+				parseTokenResponse: parseStandardTokenResponse,
+				...(opts.fetch && { fetch: opts.fetch }),
+			})
+		} else {
+			this.oauth = stubOAuth
+		}
+	}
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'vercel',
 		idempotencyKey: (req) => req.headers['x-vercel-delivery'] ?? 'vercel_unknown',

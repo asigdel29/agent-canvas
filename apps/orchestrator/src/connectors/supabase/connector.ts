@@ -25,12 +25,44 @@ import type {
 } from '@agent-canvas/connector-core'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
 import { verifyHmacSha256 } from '../_crypto.js'
+import { OAuthHelper, parseStandardTokenResponse, type FetchLike } from '../_oauth.js'
 import { buildWebhook, stubOAuth } from '../_stubs.js'
+
+export interface SupabaseConnectorOptions {
+	readonly clientId?: string
+	readonly clientSecret?: string
+	readonly scope?: string
+	readonly fetch?: FetchLike
+}
 
 export class SupabaseConnector implements Connector {
 	readonly id: ProviderId = 'supabase'
 	readonly display_name = 'Supabase'
-	readonly oauth: OAuthFramework = stubOAuth
+	readonly oauth: OAuthFramework
+
+	constructor(opts: SupabaseConnectorOptions = {}) {
+		const clientId = opts.clientId ?? process.env['SUPABASE_OAUTH_CLIENT_ID']
+		const clientSecret = opts.clientSecret ?? process.env['SUPABASE_OAUTH_CLIENT_SECRET']
+		if (clientId && clientSecret) {
+			this.oauth = new OAuthHelper({
+				config: {
+					clientId,
+					clientSecret,
+					scope: opts.scope ?? 'all',
+					authorizeUrl: 'https://api.supabase.com/v1/oauth/authorize',
+					tokenUrl: 'https://api.supabase.com/v1/oauth/token',
+					// Supabase management API does not expose a public revoke
+					// endpoint; the user disconnects the integration from
+					// the Supabase dashboard, which invalidates the tokens.
+				},
+				providerKey: 'supabase',
+				parseTokenResponse: parseStandardTokenResponse,
+				...(opts.fetch && { fetch: opts.fetch }),
+			})
+		} else {
+			this.oauth = stubOAuth
+		}
+	}
 	readonly webhook: WebhookFramework = buildWebhook({
 		provider: 'supabase',
 		idempotencyKey: (req) => req.headers['x-supabase-delivery'] ?? 'supabase_unknown',

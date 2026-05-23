@@ -5,13 +5,15 @@
  * surrounding workspace chrome (connector strip, approval inbox, spend
  * banner) per design review hierarchy.
  *
- * Phase 1 wires presence + projection to the orchestrator over the
- * sync stack. This initial scaffold mounts the components against
- * mocked data so the layout and the AgentShape rendering can be
- * iterated without a backend.
+ * Realtime: if the URL carries `?room=<id>&token=<jwt>`, the app opens
+ * a RoomEventClient against the orchestrator's `/api/sync/:room` SSE
+ * stream and renders incoming events in the LiveEvents panel. Without
+ * those params the canvas runs in standalone demo mode (mocked data).
+ *
+ * Orchestrator base URL: VITE_ORCHESTRATOR_URL (default http://localhost:3000).
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Tldraw } from 'tldraw'
 import 'tldraw/tldraw.css'
 
@@ -20,12 +22,45 @@ import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
 import { EmptyState, type StarterProvider } from './onboarding/EmptyState.js'
 import { SpendBanner } from './spend/SpendBanner.js'
+import { LiveEvents } from './sync/LiveEvents.js'
+import { RoomEventClient, type RunEventPayload } from './sync/RoomEventClient.js'
 
 const SHAPE_UTILS = [AgentShapeUtil]
+const MAX_LIVE_EVENTS = 50
+
+const ORCHESTRATOR_URL =
+	(import.meta as unknown as { env?: Record<string, string> }).env?.[
+		'VITE_ORCHESTRATOR_URL'
+	] ?? 'http://localhost:3000'
 
 export function App() {
 	const [connectors, setConnectors] = useState<readonly ConnectorTile[]>([])
 	const [approvals, setApprovals] = useState<readonly ApprovalCard[]>([])
+	const [liveEvents, setLiveEvents] = useState<readonly RunEventPayload[]>([])
+
+	const realtime = useMemo(() => {
+		if (typeof window === 'undefined') return null
+		const params = new URLSearchParams(window.location.search)
+		const room = params.get('room')
+		const token = params.get('token')
+		if (!room || !token) return null
+		return { room, token }
+	}, [])
+
+	useEffect(() => {
+		if (!realtime) return
+		const client = new RoomEventClient({
+			url: `${ORCHESTRATOR_URL}/api/sync/${encodeURIComponent(realtime.room)}`,
+			token: realtime.token,
+			onEvent: (event) => {
+				setLiveEvents((prev) => {
+					const next = [...prev, event]
+					return next.length > MAX_LIVE_EVENTS ? next.slice(-MAX_LIVE_EVENTS) : next
+				})
+			},
+		})
+		return () => client.close()
+	}, [realtime])
 
 	const hasAnyConnector = connectors.length > 0
 
@@ -34,7 +69,6 @@ export function App() {
 			...prev,
 			{ id: provider, label: providerLabel(provider), status: 'connected' },
 		])
-		// Mock a pending approval to demo the inbox after the first connect.
 		setApprovals([
 			{
 				id: 'demo_approval',
@@ -50,7 +84,7 @@ export function App() {
 	}
 
 	const view = useMemo(() => {
-		if (!hasAnyConnector) return <EmptyState onConnect={handleConnect} />
+		if (!hasAnyConnector && !realtime) return <EmptyState onConnect={handleConnect} />
 		return (
 			<>
 				<ConnectorStrip tiles={connectors} onClick={() => {}} />
@@ -60,10 +94,11 @@ export function App() {
 					onReject={(card) => setApprovals((p) => p.filter((c) => c.id !== card.id))}
 				/>
 				<SpendBanner accrued_micros={3_420_000} ceiling_micros={50_000_000} />
+				<LiveEvents events={liveEvents} />
 				<Tldraw shapeUtils={SHAPE_UTILS} />
 			</>
 		)
-	}, [hasAnyConnector, connectors, approvals])
+	}, [hasAnyConnector, realtime, connectors, approvals, liveEvents])
 
 	return <main style={{ position: 'relative', width: '100%', height: '100%' }}>{view}</main>
 }
