@@ -1,23 +1,101 @@
-/* Design system v0 — anchored to the design doc.
- * Self-hosted woff2 replaces these CDN imports in production; index.html
- * uses Fontshare + Google for the prototype. */
+/*
+ * Design system v1 — Figma spatial UX + Framer color/typography.
+ *
+ * Two principles drive every token below:
+ *
+ *   1. Figma's UX vocabulary: three-zone shell (top bar, left rail,
+ *      canvas, right rail), floating toolbar at top center, zoom
+ *      cluster bottom right, hairline borders, contextual inspector
+ *      on the right, layers/runs list on the left, comment pins on
+ *      top of the canvas.
+ *
+ *   2. Framer's color language: pure black on pure white, warm
+ *      neutral greys (not Figma's cool blue-grey), a single saturated
+ *      accent blue for primary CTAs and selection, and a hot pink
+ *      reserved for the "live now" state on running agents.
+ *
+ * Borders are universally hairline `rgba(0,0,0,0.08)` at 1px. Radii
+ * stay tight (4-8px) so chrome reads as crisp instrument panel
+ * rather than rounded card collection. Type is Switzer for UI and
+ * IBM Plex Mono for code/identifiers.
+ */
 
 :root {
-	--surface: #FAFAFA;
+	/*
+	 * Surface stack — three depths.
+	 *
+	 *   surface       page background, the canvas paper
+	 *   surface-elev  raised chrome (rails, toolbars, popovers)
+	 *   surface-sunk  inset wells (search field, code blocks)
+	 */
+	--surface: #FFFFFF;
 	--surface-elev: #FFFFFF;
-	--border: #E4E4E7;
-	--text-strong: #18181B;
-	--text-muted: #71717A;
-	--accent: #374151;
-	--status-succ: #059669;
-	--status-await: #F59E0B;
-	--status-fail: #DC2626;
-	--status-unreach: #71717A;
+	--surface-sunk: #F5F5F5;
+	--surface-overlay: rgba(0, 0, 0, 0.04);
 
+	/*
+	 * Text — pure black on white with a single muted step. We avoid
+	 * a third "extra muted" step because Framer's hierarchy is built
+	 * on weight contrast (500 vs 400), not opacity steps.
+	 */
+	--text-strong: #0A0A0A;
+	--text-muted: #737373;
+	--text-on-accent: #FFFFFF;
+
+	/*
+	 * Borders — hairline only. Two variants:
+	 *
+	 *   border          ambient separators (rail boundaries)
+	 *   border-strong   focused / hovered cells (selection ring)
+	 */
+	--border: rgba(0, 0, 0, 0.08);
+	--border-strong: rgba(0, 0, 0, 0.16);
+
+	/*
+	 * Accents.
+	 *
+	 *   accent     Framer blue. Primary CTA, link, selection ring,
+	 *              active tab indicator. The "user pressed this"
+	 *              colour.
+	 *   accent-soft  10% wash of the accent for selected row tints.
+	 *   live       Framer pink. Reserved for the LIVE state — a run
+	 *              that is executing right now. Never used for
+	 *              passive UI. Pulse animation lives below.
+	 *   live-soft  Same wash treatment for the live-row tint.
+	 */
+	--accent: #0055FF;
+	--accent-hover: #0044CC;
+	--accent-soft: rgba(0, 85, 255, 0.08);
+	--live: #FF005C;
+	--live-soft: rgba(255, 0, 92, 0.08);
+
+	/*
+	 * Run-status colour map.
+	 *
+	 * status-await uses warm amber so it reads as "waiting on a
+	 * human", distinct from in-progress (which uses --live). Reach
+	 * for --live ONLY on the running state; everything else stays
+	 * muted so the canvas keeps a calm baseline.
+	 */
+	--status-running: var(--live);
+	--status-succ: #007A33;
+	--status-await: #B45309;
+	--status-fail: #B91C1C;
+	--status-unreach: #737373;
+
+	/*
+	 * Radii — tight. Framer chrome rarely exceeds 8px on a control
+	 * and uses 12px only on hero cards.
+	 */
 	--radius-sm: 4px;
-	--radius-md: 8px;
-	--radius-lg: 12px;
+	--radius-md: 6px;
+	--radius-lg: 8px;
+	--radius-pill: 999px;
 
+	/*
+	 * Spatial grid — 4px base. Same as v0 so component math doesn't
+	 * regress.
+	 */
 	--space-1: 4px;
 	--space-2: 8px;
 	--space-3: 12px;
@@ -26,14 +104,62 @@
 	--space-6: 32px;
 	--space-7: 48px;
 
-	--ease-default: cubic-bezier(0.2, 0, 0, 1);
-	--motion-chip: 150ms;
-	--motion-card: 300ms;
-	--motion-pan: 600ms;
+	/*
+	 * Shell measurements. The whole layout is reasoned about in
+	 * these constants so a rail width change touches one place.
+	 */
+	--topbar-h: 44px;
+	--rail-w-left: 260px;
+	--rail-w-right: 300px;
+	--toolbar-h: 40px;
+	--zoom-h: 32px;
 
+	/*
+	 * Elevation — Framer keeps shadow to a minimum. One soft drop
+	 * for floating chrome, nothing else.
+	 */
+	--shadow-floating: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.04);
+
+	/*
+	 * Motion. Reduced-motion override at the end of the file zeroes
+	 * these out so vestibular users see no animation at all.
+	 */
+	--ease-default: cubic-bezier(0.2, 0, 0, 1);
+	--motion-chip: 120ms;
+	--motion-card: 200ms;
+	--motion-pan: 400ms;
+
+	/*
+	 * Type — Switzer for UI, IBM Plex Mono for code and run ids.
+	 * Display is the same family as UI; we vary by weight, not face.
+	 */
 	--font-display: 'Switzer', ui-sans-serif, system-ui, sans-serif;
 	--font-ui: 'Switzer', ui-sans-serif, system-ui, sans-serif;
 	--font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+	/*
+	 * Type scale. Whole numbers, no fractional rems — easier to
+	 * eyeball and snap to the 4px grid.
+	 */
+	--font-12: 12px;
+	--font-13: 13px;
+	--font-14: 14px;
+	--font-16: 16px;
+	--font-20: 20px;
+	--font-24: 24px;
+	--font-32: 32px;
+
+	/*
+	 * Z-stack — kept shallow on purpose. Three planes only:
+	 *
+	 *   shell    chrome that frames the canvas (top bar, rails)
+	 *   floating overlays that ride above the canvas (toolbar, zoom)
+	 *   modal    blocking dialogues, command palette, share menu
+	 */
+	--z-shell: 10;
+	--z-floating: 20;
+	--z-modal: 40;
 }
 
 * {
@@ -45,21 +171,50 @@ body {
 	margin: 0;
 	padding: 0;
 	font-family: var(--font-ui);
+	font-size: var(--font-13);
 	color: var(--text-strong);
 	background: var(--surface);
 	height: 100vh;
 	overflow: hidden;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
 }
 
 #root {
-	display: grid;
-	grid-template-rows: auto 1fr;
 	height: 100vh;
 }
 
+/*
+ * Live pulse — applied to the dot on any running agent shape /
+ * row / pill. Cheap CSS-only animation (no JS), 2s period so it
+ * reads as alive without being distracting.
+ */
+@keyframes ac-live-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.45; }
+}
+
+.ac-live-dot {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--live);
+	animation: ac-live-pulse 2s var(--ease-default) infinite;
+}
+
+/*
+ * Universal reduced-motion respect — overrides every animation and
+ * transition. Must stay at the bottom so the cascade wins.
+ */
 @media (prefers-reduced-motion: reduce) {
-	* {
+	*,
+	*::before,
+	*::after {
 		animation-duration: 0ms !important;
 		transition-duration: 0ms !important;
+	}
+	.ac-live-dot {
+		opacity: 1;
 	}
 }

@@ -1,8 +1,13 @@
 /**
- * EmptyState — first-run E1 (no connectors yet).
+ * EmptyState — first-run pane shown inside the canvas area when the
+ * workspace has no connectors yet. Centered card, not a full-screen
+ * takeover: the rails stay visible so the user understands the
+ * shell while choosing a starter.
  *
- * Per design review 22: centered "Connect a tool to start" + 4 tiles
- * (GitHub, Linear, Slack, Vercel). Subtitle: "You can add more after."
+ * Visual model: Framer-style card, hairline border, no shadow, eight
+ * pixel radius. Four equal-width tiles in a 2x2 grid; each tile is a
+ * pure white surface with a hairline border that turns accent-blue
+ * on hover.
  */
 
 export type StarterProvider = 'github' | 'linear' | 'slack' | 'vercel'
@@ -11,11 +16,11 @@ export interface EmptyStateProps {
 	readonly onConnect: (provider: StarterProvider) => void
 }
 
-const TILES: { id: StarterProvider; label: string }[] = [
-	{ id: 'github', label: 'GitHub' },
-	{ id: 'linear', label: 'Linear' },
-	{ id: 'slack', label: 'Slack' },
-	{ id: 'vercel', label: 'Vercel' },
+const TILES: { id: StarterProvider; label: string; tagline: string }[] = [
+	{ id: 'github', label: 'GitHub', tagline: 'Issues, PRs, reviews' },
+	{ id: 'linear', label: 'Linear', tagline: 'Issues and projects' },
+	{ id: 'slack', label: 'Slack', tagline: 'Channels and threads' },
+	{ id: 'vercel', label: 'Vercel', tagline: 'Deploys and previews' },
 ]
 
 export function EmptyState({ onConnect }: EmptyStateProps) {
@@ -27,42 +32,101 @@ export function EmptyState({ onConnect }: EmptyStateProps) {
 				position: 'absolute',
 				inset: 0,
 				display: 'flex',
-				flexDirection: 'column',
 				alignItems: 'center',
 				justifyContent: 'center',
-				gap: 24,
-				color: 'var(--text-strong)',
-				background: 'var(--surface)',
+				padding: 'var(--space-5)',
 			}}
 		>
-			<h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500, margin: 0 }}>
-				Connect a tool to start
-			</h1>
-			<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 160px)', gap: 12 }}>
-				{TILES.map((tile) => (
-					<button
-						key={tile.id}
-						type="button"
-						onClick={() => onConnect(tile.id)}
+			<div
+				style={{
+					display: 'flex',
+					flexDirection: 'column',
+					alignItems: 'center',
+					gap: 'var(--space-5)',
+					maxWidth: 480,
+				}}
+			>
+				<header style={{ textAlign: 'center', display: 'grid', gap: 6 }}>
+					<h1
 						style={{
-							padding: 24,
-							border: '1px solid var(--border)',
-							borderRadius: 'var(--radius-lg)',
-							background: 'var(--surface-elev)',
-							font: 'inherit',
-							fontSize: 16,
+							fontFamily: 'var(--font-display)',
+							fontSize: 'var(--font-24)',
 							fontWeight: 500,
-							color: 'var(--text-strong)',
-							cursor: 'pointer',
+							letterSpacing: -0.2,
+							margin: 0,
 						}}
 					>
-						{tile.label}
-					</button>
-				))}
+						Connect a tool to start
+					</h1>
+					<p
+						style={{
+							margin: 0,
+							fontSize: 'var(--font-13)',
+							color: 'var(--text-muted)',
+						}}
+					>
+						You can add more after.
+					</p>
+				</header>
+				<div
+					style={{
+						display: 'grid',
+						gridTemplateColumns: 'repeat(2, 1fr)',
+						gap: 'var(--space-2)',
+						width: '100%',
+					}}
+				>
+					{TILES.map((tile) => (
+						<Tile key={tile.id} {...tile} onClick={() => onConnect(tile.id)} />
+					))}
+				</div>
 			</div>
-			<p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
-				You can add more after.
-			</p>
 		</div>
+	)
+}
+
+function Tile({
+	id,
+	label,
+	tagline,
+	onClick,
+}: {
+	id: StarterProvider
+	label: string
+	tagline: string
+	onClick: () => void
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			data-provider={id}
+			style={{
+				display: 'grid',
+				gap: 4,
+				justifyItems: 'flex-start',
+				textAlign: 'left',
+				padding: 'var(--space-3) var(--space-4)',
+				background: 'var(--surface-elev)',
+				border: '1px solid var(--border)',
+				borderRadius: 'var(--radius-lg)',
+				color: 'var(--text-strong)',
+				font: 'inherit',
+				fontFamily: 'var(--font-ui)',
+				cursor: 'pointer',
+				transition: 'border-color var(--motion-chip) var(--ease-default), background var(--motion-chip) var(--ease-default)',
+			}}
+			onMouseEnter={(e) => {
+				e.currentTarget.style.borderColor = 'var(--accent)'
+				e.currentTarget.style.background = 'var(--accent-soft)'
+			}}
+			onMouseLeave={(e) => {
+				e.currentTarget.style.borderColor = 'var(--border)'
+				e.currentTarget.style.background = 'var(--surface-elev)'
+			}}
+		>
+			<span style={{ fontSize: 'var(--font-14)', fontWeight: 500 }}>{label}</span>
+			<span style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{tagline}</span>
+		</button>
 	)
 }
