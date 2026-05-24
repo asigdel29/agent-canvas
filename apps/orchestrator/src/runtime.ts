@@ -15,7 +15,8 @@
 import { ConnectorRegistry } from '@agent-canvas/connector-core'
 
 import { InMemoryAuditLog, type AuditLog } from './orchestration/auditLog.js'
-import { NonceCache } from './auth/sseToken.js'
+import { InMemoryNonceStore, type NonceStore } from './auth/sseToken.js'
+import { tryCreateUpstashNonceStore } from './auth/upstashNonceStore.js'
 import { IngestionPipeline } from './orchestration/ingestionPipeline.js'
 import { RunCoordinator } from './orchestration/runCoordinator.js'
 import { TriggerRouter } from './orchestration/triggerRouter.js'
@@ -85,7 +86,7 @@ export interface Runtime {
 	readonly templates: WorkflowTemplateStore
 	readonly triggerRouter: TriggerRouter
 	readonly auditLog: AuditLog
-	readonly sseNonces: NonceCache
+	readonly sseNonces: NonceStore
 }
 
 let cached: Runtime | null = null
@@ -193,7 +194,18 @@ function build(): Runtime {
 		resolveRoomForTrigger: async () => null,
 	})
 
-	const sseNonces = new NonceCache(10_000)
+	// Production: Upstash REST Redis (atomic cross-instance SET NX EX).
+	// Dev / single-instance: bounded in-memory FIFO. Log a warning when
+	// SSE_TOKEN_SECRET is set without a distributed nonce store — that's
+	// the misconfig that allows the 60s cross-instance replay window.
+	const upstash = tryCreateUpstashNonceStore()
+	const sseNonces: NonceStore = upstash ?? new InMemoryNonceStore(10_000)
+	if (!upstash && process.env['SSE_TOKEN_SECRET']) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			'[runtime] SSE_TOKEN_SECRET is set but UPSTASH_REDIS_REST_URL/TOKEN are not — falling back to in-memory nonce store. Cross-instance replay is possible within the 60s token TTL. Configure Upstash for production.'
+		)
+	}
 
 	return {
 		registry,

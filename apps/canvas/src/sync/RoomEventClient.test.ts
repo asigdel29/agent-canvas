@@ -259,6 +259,181 @@ describe('RoomEventClient', () => {
 		expect(FakeEventSource.opened[0]?.url).toContain('token=tok_recovered')
 		client.close()
 	})
+
+	describe('maxConsecutiveFailures + onGiveUp', () => {
+		it('calls onGiveUp once after N consecutive transport errors and stops reconnecting', async () => {
+			const onGiveUp = vi.fn()
+			// Use SilentOpenES so transport errors are not interleaved with
+			// successful opens that would reset the counter.
+			class SilentOpenES extends FakeEventSource {}
+			const origFire = (
+				SilentOpenES.prototype as unknown as { fire: (t: string, e: Event) => void }
+			).fire
+			;(SilentOpenES.prototype as unknown as { fire: (t: string, e: Event) => void }).fire =
+				function (this: SilentOpenES, type: string, e: Event) {
+					if (type === 'open') return
+					origFire.call(this, type, e)
+				}
+
+			const client = new RoomEventClient({
+				url: 'http://localhost/api/sync/room_a',
+				tokenFactory: asyncFactory('t'),
+				onEvent: () => {},
+				maxConsecutiveFailures: 3,
+				onGiveUp,
+				eventSourceFactory: (u) => new SilentOpenES(u) as unknown as EventSource,
+			})
+			await flushMicrotasks()
+
+			// Fire 3 transport errors. After the 3rd, onGiveUp must fire and
+			// no further EventSource should be constructed.
+			FakeEventSource.opened.slice(-1)[0]!.emitTransportError() // 1st failure
+			await vi.advanceTimersByTimeAsync(250)
+			await Promise.resolve()
+			FakeEventSource.opened.slice(-1)[0]!.emitTransportError() // 2nd failure
+			await vi.advanceTimersByTimeAsync(500)
+			await Promise.resolve()
+			expect(onGiveUp).not.toHaveBeenCalled() // still under cap
+			FakeEventSource.opened.slice(-1)[0]!.emitTransportError() // 3rd failure — cap hit
+
+			expect(onGiveUp).toHaveBeenCalledTimes(1)
+			expect(onGiveUp.mock.calls[0]![0].attempts).toBe(3)
+
+			// Further time advancement must NOT create a new EventSource.
+			const beforeCount = FakeEventSource.opened.length
+			await vi.advanceTimersByTimeAsync(30_000)
+			await Promise.resolve()
+			expect(FakeEventSource.opened.length).toBe(beforeCount)
+		})
+
+		it('successful open resets the consecutive-failure counter', async () => {
+			const onGiveUp = vi.fn()
+			// Mixed-mode ES: open fires only on every OTHER instance, so we
+			// alternate failure-success-failure-... without ever hitting the cap.
+			let constructed = 0
+			class ToggleES extends FakeEventSource {
+				constructor(url: string) {
+					super(url)
+					constructed += 1
+				}
+			}
+			const origFire = (
+				ToggleES.prototype as unknown as { fire: (t: string, e: Event) => void }
+			).fire
+			;(ToggleES.prototype as unknown as { fire: (t: string, e: Event) => void }).fire =
+				function (this: ToggleES, type: string, e: Event) {
+					// Suppress open on every other ES so failures don't get reset.
+					if (type === 'open' && constructed % 2 === 1) return
+					origFire.call(this, type, e)
+				}
+
+			const client = new RoomEventClient({
+				url: 'http://localhost/api/sync/room_a',
+				tokenFactory: asyncFactory('t'),
+				onEvent: () => {},
+				maxConsecutiveFailures: 3,
+				onGiveUp,
+				eventSourceFactory: (u) => new ToggleES(u) as unknown as EventSource,
+			})
+			await flushMicrotasks()
+
+			// ES #1 (no open) → error → counter=1
+			FakeEventSource.opened.slice(-1)[0]!.emitTransportError()
+			await vi.advanceTimersByTimeAsync(250)
+			await Promise.resolve()
+			// ES #2 (open fires) → counter reset to 0 via open handler
+			// ES #2 then error → counter=1
+			FakeEventSource.opened.slice(-1)[0]!.emitTransportError()
+			await vi.advanceTimersByTimeAsync(500)
+			await Promise.resolve()
+			// ES #3 (no open) → error → counter=2
+			FakeEventSource.opened.slice(-1)[0]!.emitTransportError()
+			await vi.advanceTimersByTimeAsync(1000)
+			await Promise.resolve()
+			// ES #4 (open fires) → counter reset to 0
+
+			// Despite 3 transport errors over the run, onGiveUp must NOT fire
+			// because the counter was reset between failures by successful opens.
+			expect(onGiveUp).not.toHaveBeenCalled()
+			client.close()
+		})
+
+		it('server-initiated reconnect does NOT count as a failure', async () => {
+			const onGiveUp = vi.fn()
+			const client = new RoomEventClient({
+				url: 'http://localhost/api/sync/room_a',
+				tokenFactory: asyncFactory('t'),
+				onEvent: () => {},
+				maxConsecutiveFailures: 3,
+				onGiveUp,
+				eventSourceFactory: (u) => new FakeEventSource(u) as unknown as EventSource,
+			})
+			await flushMicrotasks()
+
+			// Fire 5 server-initiated reconnects with no transport errors.
+			// Even with cap=3, onGiveUp must never fire — these are normal.
+			for (let i = 0; i < 5; i++) {
+				FakeEventSource.opened.slice(-1)[0]!.emit({ type: 'reconnect' })
+				await vi.advanceTimersByTimeAsync(30_000) // backoff long since maxed
+				await Promise.resolve()
+			}
+
+			expect(onGiveUp).not.toHaveBeenCalled()
+			expect(FakeEventSource.opened.length).toBeGreaterThanOrEqual(5)
+			client.close()
+		})
+
+		it('tokenFactory failures count against the cap (network down counts)', async () => {
+			const onGiveUp = vi.fn()
+			const tokenFactory = async (): Promise<string> => {
+				throw new Error('network_down')
+			}
+			new RoomEventClient({
+				url: 'http://localhost/api/sync/room_a',
+				tokenFactory,
+				onEvent: () => {},
+				maxConsecutiveFailures: 2,
+				onGiveUp,
+				eventSourceFactory: (u) => new FakeEventSource(u) as unknown as EventSource,
+			})
+			await flushMicrotasks() // first failure
+			await vi.advanceTimersByTimeAsync(250)
+			await flushMicrotasks() // second failure → cap hit
+			expect(onGiveUp).toHaveBeenCalledTimes(1)
+			expect(onGiveUp.mock.calls[0]![0].lastError.message).toBe('network_down')
+		})
+
+		it('default (no maxConsecutiveFailures) preserves retry-forever behavior', async () => {
+			const onGiveUp = vi.fn()
+			class SilentOpenES extends FakeEventSource {}
+			const origFire = (
+				SilentOpenES.prototype as unknown as { fire: (t: string, e: Event) => void }
+			).fire
+			;(SilentOpenES.prototype as unknown as { fire: (t: string, e: Event) => void }).fire =
+				function (this: SilentOpenES, type: string, e: Event) {
+					if (type === 'open') return
+					origFire.call(this, type, e)
+				}
+
+			const client = new RoomEventClient({
+				url: 'http://localhost/api/sync/room_a',
+				tokenFactory: asyncFactory('t'),
+				onEvent: () => {},
+				onGiveUp, // provided but no cap — must never fire
+				eventSourceFactory: (u) => new SilentOpenES(u) as unknown as EventSource,
+			})
+			await flushMicrotasks()
+
+			for (let i = 0; i < 50; i++) {
+				FakeEventSource.opened.slice(-1)[0]!.emitTransportError()
+				await vi.advanceTimersByTimeAsync(30_000)
+				await Promise.resolve()
+			}
+			expect(onGiveUp).not.toHaveBeenCalled()
+			expect(FakeEventSource.opened.length).toBeGreaterThan(40)
+			client.close()
+		})
+	})
 })
 
 const MIN_BACKOFF_MS_FOR_TEST = 250
