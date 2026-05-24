@@ -48,12 +48,12 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const runtime = getRuntime() as unknown as {
 		roomEventBus?: import('../../dist/sync/roomEventBus.js').RoomEventBus
-		sseNonces?: import('../../dist/auth/sseToken.js').NonceCache
+		sseNonces?: import('../../dist/auth/sseToken.js').NonceStore
 	}
 	const bus = runtime.roomEventBus
 	if (!bus) return withCorsHeaders(req, jsonError(503, 'realtime_bus_not_initialized'))
-	const nonceCache = runtime.sseNonces
-	if (!nonceCache) return withCorsHeaders(req, jsonError(500, 'sse_nonce_cache_not_initialized'))
+	const nonceStore = runtime.sseNonces
+	if (!nonceStore) return withCorsHeaders(req, jsonError(500, 'sse_nonce_store_not_initialized'))
 
 	// Two-phase verify: (a) signature/expiry/room scope check up front so
 	// invalid tokens are rejected without ever entering the nonce cache;
@@ -79,7 +79,8 @@ export default async function handler(req: Request): Promise<Response> {
 	// Stream is live — burn the nonce. Doing this last means a 401-then-
 	// retry with the same token replays cleanly via the signature check
 	// path only; once we hand the stream back, the token is dead.
-	if (!claimSseTokenNonce(claims.nonce, nonceCache)) {
+	const claimed = await claimSseTokenNonce(claims.nonce, nonceStore)
+	if (!claimed) {
 		return withCorsHeaders(req, jsonError(401, 'replayed'))
 	}
 

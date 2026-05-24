@@ -11,11 +11,10 @@
  * Even if the URL is logged, the token is dead by the time any human
  * sees the log.
  *
- * Mechanism: HMAC-SHA256 over (sub, room_id, exp, nonce). Server-side
- * "used" tracking is in-memory + bounded (we accept the rare double-
- * use under instance restart; the worst case is one extra second of
- * SSE access). For production hardening, a Redis-backed nonce store
- * survives restarts.
+ * Mechanism: HMAC-SHA256 over (sub, room_id, exp, nonce). The nonce
+ * store is pluggable: production uses Upstash Redis (atomic SET NX EX
+ * across all serverless instances); dev uses an in-memory FIFO. Both
+ * implement `NonceStore`. See `runtime.ts` for selection.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -63,16 +62,55 @@ export function mintSseToken(input: MintInput): string {
 }
 
 /**
- * Bounded in-memory nonce store. Holds up to N nonces; evicts FIFO.
- * Same-instance reuse is rejected; cross-instance reuse falls back to
- * the TTL window (best-effort under multi-Lambda).
+ * Atomic single-use nonce store. `claim(nonce)` returns true if the
+ * nonce was unused (and is now claimed), false if it was already seen.
+ *
+ * Implementations:
+ *   - InMemoryNonceStore — FIFO-bounded, per-instance. Dev / single-
+ *     process deployments.
+ *   - UpstashNonceStore — `SET nonce NX EX <ttl>`, atomic across all
+ *     serverless function instances. Production.
+ *
+ * Production note: with horizontal scale and a per-instance store, two
+ * concurrent requests with the same captured token landing on different
+ * instances can both pass `claim`. The token TTL bounds the window
+ * (60s default) but a distributed store closes it entirely.
  */
-export class NonceCache {
+export interface NonceStore {
+	claim(nonce: string, ttlSeconds: number): Promise<boolean>
+}
+
+/**
+ * Bounded in-memory nonce store. Holds up to N nonces; evicts FIFO.
+ * Production deployments should prefer a distributed store via the
+ * NonceStore interface — this class is for dev and single-instance use.
+ *
+ * NOTE: `capacity` must exceed peak requests-per-TTL-window. With 60s
+ * TTL and 10k capacity, sustained ~167 req/s/instance starts evicting
+ * still-valid nonces; that weakens the single-use property without
+ * enabling replay (signature+exp still gate). Pick a Redis store for
+ * any deployment where burst > 100 req/s/instance is plausible.
+ */
+export class InMemoryNonceStore implements NonceStore {
 	private readonly seen = new Set<string>()
 	private readonly fifo: string[] = []
 	constructor(private readonly capacity = 10_000) {}
 
-	claim(nonce: string): boolean {
+	// Async signature for interface conformance; the in-memory path is sync.
+	// eslint-disable-next-line @typescript-eslint/require-await
+	async claim(nonce: string, _ttlSeconds: number): Promise<boolean> {
+		if (this.seen.has(nonce)) return false
+		this.seen.add(nonce)
+		this.fifo.push(nonce)
+		if (this.fifo.length > this.capacity) {
+			const evicted = this.fifo.shift()
+			if (evicted) this.seen.delete(evicted)
+		}
+		return true
+	}
+
+	/** Test helper — synchronous claim with default TTL. */
+	claimSync(nonce: string): boolean {
 		if (this.seen.has(nonce)) return false
 		this.seen.add(nonce)
 		this.fifo.push(nonce)
@@ -84,11 +122,20 @@ export class NonceCache {
 	}
 }
 
+/**
+ * @deprecated Renamed to InMemoryNonceStore. Keep as alias for the
+ * single-pass migration; remove after callers update.
+ */
+export const NonceCache = InMemoryNonceStore
+export type NonceCache = InMemoryNonceStore
+
 export interface VerifyInput {
 	readonly token: string
 	readonly room_id: string
 	readonly secret: string
-	readonly nonceCache: NonceCache
+	readonly nonceStore: NonceStore
+	/** Defaults to `DEFAULT_TTL_SECONDS + 60` so a Redis nonce TTL covers the token's full lifetime plus clock-skew slack. */
+	readonly nonceTtlSeconds?: number
 	readonly nowSeconds?: number
 }
 
@@ -143,8 +190,12 @@ export function verifySseTokenSignatureAndScope(input: {
 }
 
 /** Claim the nonce. Returns true if accepted, false if already used. */
-export function claimSseTokenNonce(nonce: string, cache: NonceCache): boolean {
-	return cache.claim(nonce)
+export async function claimSseTokenNonce(
+	nonce: string,
+	store: NonceStore,
+	ttlSeconds = DEFAULT_TTL_SECONDS + 60
+): Promise<boolean> {
+	return store.claim(nonce, ttlSeconds)
 }
 
 /**
@@ -154,9 +205,10 @@ export function claimSseTokenNonce(nonce: string, cache: NonceCache): boolean {
  * verifySseTokenSignatureAndScope + claimSseTokenNonce explicitly so a
  * post-verify failure doesn't burn the nonce.
  */
-export function verifySseToken(input: VerifyInput): SseTokenClaims {
+export async function verifySseToken(input: VerifyInput): Promise<SseTokenClaims> {
 	const claims = verifySseTokenSignatureAndScope(input)
-	if (!claimSseTokenNonce(claims.nonce, input.nonceCache)) {
+	const ttl = input.nonceTtlSeconds ?? DEFAULT_TTL_SECONDS + 60
+	if (!(await input.nonceStore.claim(claims.nonce, ttl))) {
 		throw new SseTokenError('replayed')
 	}
 	return claims
