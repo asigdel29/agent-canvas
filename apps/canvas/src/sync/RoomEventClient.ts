@@ -13,6 +13,14 @@
  * gets appended to the SSE URL as `?token=`. URL-borne tokens leak via
  * logs/Referer; the short TTL collapses the exposure window to seconds
  * and replay is server-rejected.
+ *
+ * Reconnect budget: `maxConsecutiveFailures` caps how many failed
+ * attempts in a row the client will tolerate before giving up and
+ * calling `onGiveUp`. A successful open resets the counter to zero.
+ * Defaults to `Infinity` — the historical retry-forever behavior — but
+ * production canvases should set a finite cap (e.g. 20 attempts ≈ 10
+ * minutes at 30 s max backoff) so a phone left on a dead network
+ * eventually stops draining battery.
  */
 
 export type RoomEventClientMessage =
@@ -41,6 +49,20 @@ export interface RoomEventClientOptions {
 	readonly onEvent: (event: RunEventPayload) => void
 	readonly onHello?: () => void
 	readonly onError?: (err: Event | Error) => void
+	/**
+	 * Cap on consecutive failed connect attempts before giving up.
+	 * Counts a failure on either: (a) `tokenFactory` throws, or
+	 * (b) the EventSource fires `error` before `open`. A successful
+	 * `open` resets the counter to zero. Default: `Infinity`.
+	 */
+	readonly maxConsecutiveFailures?: number
+	/**
+	 * Fired once when the failure counter reaches `maxConsecutiveFailures`.
+	 * After this fires the client transitions to a closed state and will
+	 * not attempt any further reconnects — the caller must construct a
+	 * fresh client (e.g. after a user-initiated retry).
+	 */
+	readonly onGiveUp?: (reason: { attempts: number; lastError: Error | Event }) => void
 	/** Used by tests to inject a fake EventSource implementation. */
 	readonly eventSourceFactory?: (url: string) => EventSource
 }
@@ -55,6 +77,9 @@ export class RoomEventClient {
 	private backoffMs = MIN_BACKOFF_MS
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 	private closed = false
+	private consecutiveFailures = 0
+	private lastError: Error | Event | null = null
+	private gaveUp = false
 
 	constructor(private readonly opts: RoomEventClientOptions) {
 		void this.connect()
@@ -73,8 +98,10 @@ export class RoomEventClient {
 		try {
 			token = await this.opts.tokenFactory()
 		} catch (err) {
-			this.opts.onError?.(err instanceof Error ? err : new Error('token_factory_failed'))
-			this.scheduleReconnect()
+			const wrapped = err instanceof Error ? err : new Error('token_factory_failed')
+			this.lastError = wrapped
+			this.opts.onError?.(wrapped)
+			this.recordFailureAndMaybeReconnect()
 			return
 		}
 		if (this.closed) return
@@ -86,6 +113,8 @@ export class RoomEventClient {
 		this.es.addEventListener('error', (err) => this.handleTransportError(err))
 		this.es.addEventListener('open', () => {
 			this.backoffMs = MIN_BACKOFF_MS
+			this.consecutiveFailures = 0
+			this.lastError = null
 		})
 	}
 
@@ -104,20 +133,47 @@ export class RoomEventClient {
 				this.opts.onEvent(msg.event)
 				break
 			case 'reconnect':
-				this.scheduleReconnect()
+				// Server-initiated reconnect is NOT a failure — the orchestrator
+				// closes the stream before its function timeout. Do not bump
+				// the failure counter; just schedule the next connect.
+				this.es?.close()
+				this.es = null
+				if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+				this.reconnectTimer = setTimeout(() => {
+					this.reconnectTimer = null
+					void this.connect()
+				}, this.backoffMs)
+				this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS)
 				break
 		}
 	}
 
 	private handleTransportError(err: Event): void {
+		this.lastError = err
 		this.opts.onError?.(err)
-		this.scheduleReconnect()
+		this.recordFailureAndMaybeReconnect()
 	}
 
-	private scheduleReconnect(): void {
+	/**
+	 * Bump the consecutive-failure counter, then either schedule the
+	 * next reconnect attempt or, if the cap is hit, call `onGiveUp` and
+	 * lock the client into the closed state.
+	 */
+	private recordFailureAndMaybeReconnect(): void {
 		if (this.closed) return
 		this.es?.close()
 		this.es = null
+		this.consecutiveFailures += 1
+		const max = this.opts.maxConsecutiveFailures ?? Infinity
+		if (this.consecutiveFailures >= max && !this.gaveUp) {
+			this.gaveUp = true
+			this.closed = true
+			if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+			this.reconnectTimer = null
+			const last = this.lastError ?? new Error('unknown_failure')
+			this.opts.onGiveUp?.({ attempts: this.consecutiveFailures, lastError: last })
+			return
+		}
 		if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null

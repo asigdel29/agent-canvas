@@ -75,10 +75,19 @@ function intakeAndStashCredentials(): { room: string; session: string } | null {
 	return null
 }
 
+// Roughly: 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 30s, 30s, ...
+// 20 attempts ≈ ~9.5 minutes at the 30s max-backoff cap. After that
+// we give up and surface "lost connection" so a phone left on a dead
+// network stops draining battery and the user knows to refresh.
+const MAX_RECONNECT_ATTEMPTS = 20
+
 export function App() {
 	const [connectors, setConnectors] = useState<readonly ConnectorTile[]>([])
 	const [approvals, setApprovals] = useState<readonly ApprovalCard[]>([])
 	const [liveEvents, setLiveEvents] = useState<readonly RunEventPayload[]>([])
+	const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'disconnected'>(
+		'connected'
+	)
 
 	const realtime = useMemo(() => intakeAndStashCredentials(), [])
 
@@ -106,6 +115,8 @@ export function App() {
 					return next.length > MAX_LIVE_EVENTS ? next.slice(-MAX_LIVE_EVENTS) : next
 				})
 			},
+			maxConsecutiveFailures: MAX_RECONNECT_ATTEMPTS,
+			onGiveUp: () => setRealtimeStatus('disconnected'),
 		})
 		return () => client.close()
 	}, [realtime])
@@ -143,12 +154,60 @@ export function App() {
 				/>
 				<SpendBanner accrued_micros={3_420_000} ceiling_micros={50_000_000} />
 				<LiveEvents events={liveEvents} />
+				{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
 				<Tldraw shapeUtils={SHAPE_UTILS} />
 			</>
 		)
-	}, [hasAnyConnector, realtime, connectors, approvals, liveEvents])
+	}, [hasAnyConnector, realtime, connectors, approvals, liveEvents, realtimeStatus])
 
 	return <main style={{ position: 'relative', width: '100%', height: '100%' }}>{view}</main>
+}
+
+/**
+ * Surfaced when RoomEventClient.onGiveUp fires. The simplest possible
+ * recovery affordance: tell the user the live feed stopped and let them
+ * decide when to reload. We deliberately avoid auto-reload because the
+ * user may be in the middle of editing the canvas.
+ */
+function DisconnectedBanner() {
+	return (
+		<aside
+			role="alert"
+			style={{
+				position: 'fixed',
+				top: 12,
+				right: 12,
+				padding: '10px 14px',
+				background: 'var(--surface-elev, #fff7ed)',
+				border: '1px solid var(--status-warn, #f59e0b)',
+				borderRadius: 8,
+				fontSize: 13,
+				zIndex: 20,
+				maxWidth: 320,
+				boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+			}}
+		>
+			<strong>Live feed disconnected.</strong>
+			<div style={{ marginTop: 4 }}>
+				Canvas is still editable. Reload to reconnect.{' '}
+				<button
+					type="button"
+					onClick={() => window.location.reload()}
+					style={{
+						background: 'transparent',
+						border: 'none',
+						color: 'var(--accent, #2563eb)',
+						cursor: 'pointer',
+						padding: 0,
+						font: 'inherit',
+						textDecoration: 'underline',
+					}}
+				>
+					Reload
+				</button>
+			</div>
+		</aside>
+	)
 }
 
 function providerLabel(p: StarterProvider): string {
