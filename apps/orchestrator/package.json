@@ -10,7 +10,8 @@
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
     "eval": "vitest run --config evals/vitest.config.ts",
-    "migrate": "node --import tsx ./src/postgres/migrate-cli.ts"
+    "migrate": "node --import tsx ./src/postgres/migrate-cli.ts",
+    "dev": "npm run build && node --import tsx ./scripts/dev-server.ts"
   },
   "dependencies": {
     "@agent-canvas/connector-core": "*",
@@ -19,6 +20,7 @@
     "postgres": "^3.4.0"
   },
   "devDependencies": {
+    "tsx": "^4.22.3",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
   }
