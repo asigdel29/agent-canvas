@@ -7,8 +7,12 @@
  * backoff capped at 30 s. Disposal stops both the EventSource and any
  * pending reconnect timer.
  *
- * Authentication: the JWT bearer is passed as the `token` query param
- * because the browser's EventSource constructor cannot set headers.
+ * Authentication: each connect mints a FRESH single-use 60-second SSE
+ * token via the supplied `tokenFactory`. The factory typically POSTs
+ * to /api/auth/sse-token with the session bearer; the token returned
+ * gets appended to the SSE URL as `?token=`. URL-borne tokens leak via
+ * logs/Referer; the short TTL collapses the exposure window to seconds
+ * and replay is server-rejected.
  */
 
 export type RoomEventClientMessage =
@@ -29,7 +33,11 @@ export interface RunEventPayload {
 
 export interface RoomEventClientOptions {
 	readonly url: string
-	readonly token: string
+	/**
+	 * Mints an ephemeral SSE token. Called on every connect — tokens are
+	 * single-use and 60-second TTL, so reconnect needs a fresh one.
+	 */
+	readonly tokenFactory: () => Promise<string>
 	readonly onEvent: (event: RunEventPayload) => void
 	readonly onHello?: () => void
 	readonly onError?: (err: Event | Error) => void
@@ -49,7 +57,7 @@ export class RoomEventClient {
 	private closed = false
 
 	constructor(private readonly opts: RoomEventClientOptions) {
-		this.connect()
+		void this.connect()
 	}
 
 	close(): void {
@@ -59,10 +67,19 @@ export class RoomEventClient {
 		this.es = null
 	}
 
-	private connect(): void {
+	private async connect(): Promise<void> {
+		if (this.closed) return
+		let token: string
+		try {
+			token = await this.opts.tokenFactory()
+		} catch (err) {
+			this.opts.onError?.(err instanceof Error ? err : new Error('token_factory_failed'))
+			this.scheduleReconnect()
+			return
+		}
 		if (this.closed) return
 		const u = new URL(this.opts.url)
-		u.searchParams.set('token', this.opts.token)
+		u.searchParams.set('token', token)
 		const factory = this.opts.eventSourceFactory ?? ((url: string) => new EventSource(url))
 		this.es = factory(u.toString())
 		this.es.addEventListener('message', (raw) => this.handleMessage(raw))
@@ -104,7 +121,7 @@ export class RoomEventClient {
 		if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null
-			this.connect()
+			void this.connect()
 		}, this.backoffMs)
 		this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS)
 	}
