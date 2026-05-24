@@ -92,7 +92,19 @@ export interface VerifyInput {
 	readonly nowSeconds?: number
 }
 
-export function verifySseToken(input: VerifyInput): SseTokenClaims {
+/**
+ * Signature + expiry + scope check ONLY. Does NOT touch the nonce
+ * cache. Callers MUST call `claimSseTokenNonce(claims.nonce, cache)`
+ * after the protected resource is successfully constructed; otherwise
+ * a transient infra failure burns a one-shot token and confuses
+ * legitimate retries with replays.
+ */
+export function verifySseTokenSignatureAndScope(input: {
+	readonly token: string
+	readonly room_id: string
+	readonly secret: string
+	readonly nowSeconds?: number
+}): SseTokenClaims {
 	const parts = input.token.split('.')
 	if (parts.length !== 6) throw new SseTokenError('malformed')
 	const [version, sub, room_id, expStr, nonce, sig] = parts as [
@@ -106,15 +118,14 @@ export function verifySseToken(input: VerifyInput): SseTokenClaims {
 	if (version !== SSE_TOKEN_VERSION) throw new SseTokenError('wrong_version')
 	const exp = Number.parseInt(expStr, 10)
 	if (!Number.isFinite(exp)) throw new SseTokenError('malformed')
+	// Constant-time-style hex check: Buffer.from silently truncates on
+	// invalid hex, which the length+timingSafeEqual gate would catch, but
+	// validating up front avoids constructing the buffer at all on garbage.
+	if (!/^[0-9a-f]+$/.test(sig)) throw new SseTokenError('malformed')
 
 	const claims = `${version}.${sub}.${room_id}.${exp}.${nonce}`
 	const expected = createHmac('sha256', input.secret).update(claims).digest('hex')
-	let provided: Buffer
-	try {
-		provided = Buffer.from(sig, 'hex')
-	} catch {
-		throw new SseTokenError('malformed')
-	}
+	const provided = Buffer.from(sig, 'hex')
 	const expectedBuf = Buffer.from(expected, 'hex')
 	if (
 		provided.length !== expectedBuf.length ||
@@ -128,7 +139,25 @@ export function verifySseToken(input: VerifyInput): SseTokenClaims {
 
 	if (room_id !== input.room_id) throw new SseTokenError('wrong_room')
 
-	if (!input.nonceCache.claim(nonce)) throw new SseTokenError('replayed')
-
 	return { sub, room_id, exp, nonce }
+}
+
+/** Claim the nonce. Returns true if accepted, false if already used. */
+export function claimSseTokenNonce(nonce: string, cache: NonceCache): boolean {
+	return cache.claim(nonce)
+}
+
+/**
+ * One-shot verify-and-claim. Convenience for callers that don't need
+ * the two-phase ordering (e.g. tests, or routes where the resource is
+ * pure-compute and can't fail). Production SSE routes should prefer
+ * verifySseTokenSignatureAndScope + claimSseTokenNonce explicitly so a
+ * post-verify failure doesn't burn the nonce.
+ */
+export function verifySseToken(input: VerifyInput): SseTokenClaims {
+	const claims = verifySseTokenSignatureAndScope(input)
+	if (!claimSseTokenNonce(claims.nonce, input.nonceCache)) {
+		throw new SseTokenError('replayed')
+	}
+	return claims
 }

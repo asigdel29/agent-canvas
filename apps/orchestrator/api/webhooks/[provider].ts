@@ -61,9 +61,6 @@ export default async function handler(req: Request): Promise<Response> {
 				auditLog?: import('../../dist/orchestration/auditLog.js').AuditLog
 			}
 			if (auditLog) {
-				const ua = req.headers.get('user-agent') ?? 'unknown'
-				const sourceIp =
-					req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
 				await auditLog.record({
 					actor_user_id: 'anon_webhook' as never,
 					room_id: 'system' as never,
@@ -71,7 +68,14 @@ export default async function handler(req: Request): Promise<Response> {
 					action: 'webhook_signature_failed',
 					result: 'rejected',
 					trace_id: req.headers.get('traceparent') ?? 'na',
-					details: { provider, source_ip: sourceIp, user_agent: ua },
+					details: {
+						provider,
+						source_ip:
+							firstHopIp(req.headers.get('x-forwarded-for')) ??
+							sanitizeIp(req.headers.get('x-real-ip')) ??
+							'unknown',
+						user_agent: sanitizeHeader(req.headers.get('user-agent'), 256),
+					},
 				})
 			}
 		} catch {
@@ -144,6 +148,35 @@ function isVendorAdapter(
 	} catch {
 		return false
 	}
+}
+
+/**
+ * Cap a request header to a sane length and strip ASCII control chars
+ * (including ANSI escapes used to confuse operators reading logs).
+ * Returns 'unknown' for null/undefined input.
+ */
+function sanitizeHeader(value: string | null | undefined, maxLen: number): string {
+	if (!value) return 'unknown'
+	const cleaned = value.replace(/[\x00-\x1f\x7f]/g, '')
+	return cleaned.length > maxLen ? cleaned.slice(0, maxLen) : cleaned
+}
+
+/** Validate something that should be an IP. Returns null on reject. */
+function sanitizeIp(value: string | null | undefined): string | null {
+	if (!value) return null
+	const trimmed = value.trim()
+	if (trimmed.length === 0 || trimmed.length > 45) return null // ipv6 max len
+	// Permit only IP-safe chars; net.isIP would be stricter but this avoids
+	// the import and the same shape rejects garbage.
+	if (!/^[0-9a-fA-F:.]+$/.test(trimmed)) return null
+	return trimmed
+}
+
+/** Take the first hop from X-Forwarded-For (closest to the client). */
+function firstHopIp(xff: string | null | undefined): string | null {
+	if (!xff) return null
+	const first = xff.split(',')[0]?.trim()
+	return sanitizeIp(first)
 }
 
 function jsonError(status: number, code: string): Response {

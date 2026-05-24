@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { corsHeadersFor, preflightResponse, withCorsHeaders } from './cors.js'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { corsHeadersFor, preflightResponse, readCorsConfig, withCorsHeaders } from './cors.js'
 
 const ALLOWED = ['https://canvas.example.com']
 
@@ -10,8 +10,13 @@ function req(method: string, origin?: string): Request {
 }
 
 describe('CORS', () => {
-	it('returns empty headers when there is no Origin header (same-origin)', () => {
-		expect(corsHeadersFor(req('POST'), { allowedOrigins: ALLOWED })).toEqual({})
+	it('emits only Vary: Origin when there is no Origin header (same-origin)', () => {
+		// Vary must fire on every endpoint that may vary by origin so a
+		// shared cache cannot serve a response cached for origin A back
+		// to origin B.
+		expect(corsHeadersFor(req('POST'), { allowedOrigins: ALLOWED })).toEqual({
+			vary: 'Origin',
+		})
 	})
 
 	it('returns matching headers for an allowed origin', () => {
@@ -23,11 +28,11 @@ describe('CORS', () => {
 		expect(h['vary']).toBe('Origin')
 	})
 
-	it('returns empty headers for an origin not in the allowlist', () => {
+	it('emits only Vary: Origin (no allow-origin) for an origin not in the allowlist', () => {
 		const h = corsHeadersFor(req('POST', 'https://evil.example.com'), {
 			allowedOrigins: ALLOWED,
 		})
-		expect(h).toEqual({})
+		expect(h).toEqual({ vary: 'Origin' })
 	})
 
 	it('refuses to echo a wildcard origin even if ALLOWED_ORIGINS includes *', () => {
@@ -72,9 +77,50 @@ describe('CORS', () => {
 		const wrapped = withCorsHeaders(req('POST', 'https://canvas.example.com'), inner)
 		expect(wrapped.status).toBe(201)
 		expect(wrapped.headers.get('content-type')).toBe('application/json')
-		// Without ALLOWED_ORIGINS set, the wrapper returns the inner response unchanged.
-		// Set the env var by routing through corsHeadersFor with an explicit config.
-		// For coverage, also confirm headers are forwarded when present.
+		expect(wrapped.headers.get('vary')).toBe('Origin')
 		expect(await wrapped.text()).toBe('{"ok":true}')
+	})
+
+	describe('readCorsConfig', () => {
+		const original = process.env['ALLOWED_ORIGINS']
+		beforeEach(() => {
+			delete process.env['ALLOWED_ORIGINS']
+		})
+		afterEach(() => {
+			if (original === undefined) delete process.env['ALLOWED_ORIGINS']
+			else process.env['ALLOWED_ORIGINS'] = original
+		})
+
+		it('strips wildcard "*" silently', () => {
+			process.env['ALLOWED_ORIGINS'] = '*,https://canvas.example.com'
+			expect(readCorsConfig().allowedOrigins).toEqual(['https://canvas.example.com'])
+		})
+
+		it('rejects the literal string "null" (sandboxed iframe / file://)', () => {
+			process.env['ALLOWED_ORIGINS'] = 'null,https://canvas.example.com'
+			expect(readCorsConfig().allowedOrigins).toEqual(['https://canvas.example.com'])
+		})
+
+		it('strips trailing slashes and paths so entries match the browser Origin form', () => {
+			process.env['ALLOWED_ORIGINS'] = 'https://canvas.example.com/,https://other.example.com/app'
+			expect(readCorsConfig().allowedOrigins).toEqual([
+				'https://canvas.example.com',
+				'https://other.example.com',
+			])
+		})
+
+		it('rejects http:// for non-localhost origins', () => {
+			process.env['ALLOWED_ORIGINS'] =
+				'http://evil.example.com,http://localhost:5173,https://canvas.example.com'
+			expect(readCorsConfig().allowedOrigins).toEqual([
+				'http://localhost:5173',
+				'https://canvas.example.com',
+			])
+		})
+
+		it('rejects non-URL garbage entries', () => {
+			process.env['ALLOWED_ORIGINS'] = 'not-a-url,javascript:alert(1),https://canvas.example.com'
+			expect(readCorsConfig().allowedOrigins).toEqual(['https://canvas.example.com'])
+		})
 	})
 })

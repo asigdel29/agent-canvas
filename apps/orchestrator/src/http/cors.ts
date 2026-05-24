@@ -30,7 +30,38 @@ export function readCorsConfig(): CorsConfig {
 		.map((s) => s.trim())
 		.filter((s) => s.length > 0)
 		.filter((s) => s !== '*') // never honor a wildcard
+		.filter((s) => s !== 'null') // sandboxed iframes / file:// send Origin: null — never trust it
+		.map(normalizeOrigin)
+		.filter((s): s is string => s !== null)
 	return { allowedOrigins }
+}
+
+/**
+ * Validate and normalize a single origin entry. Returns null on reject.
+ *
+ *   - Must parse as a URL with http: or https: scheme.
+ *   - http: only allowed for localhost / 127.0.0.1 (dev convenience).
+ *   - Trailing slashes and paths are stripped — the Origin header in
+ *     browsers never carries them, so a path-bearing entry would never
+ *     match anyway and indicates operator confusion.
+ */
+function normalizeOrigin(raw: string): string | null {
+	let url: URL
+	try {
+		url = new URL(raw)
+	} catch {
+		return null
+	}
+	if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+	if (url.protocol === 'http:') {
+		const isLocal =
+			url.hostname === 'localhost' ||
+			url.hostname === '127.0.0.1' ||
+			url.hostname === '::1'
+		if (!isLocal) return null
+	}
+	// `${origin}` is hostname + port, no path, no trailing slash.
+	return url.origin
 }
 
 /**
@@ -44,8 +75,11 @@ export function corsHeadersFor(
 	cfg: CorsConfig = readCorsConfig()
 ): Record<string, string> {
 	const origin = req.headers.get('origin')
-	if (!origin) return {}
-	if (!cfg.allowedOrigins.includes(origin)) return {}
+	// Always emit Vary: Origin on endpoints that vary by origin, even when
+	// no other CORS headers fire. Without it, a shared cache can serve a
+	// response cached for origin A back to origin B.
+	if (!origin) return { vary: 'Origin' }
+	if (!cfg.allowedOrigins.includes(origin)) return { vary: 'Origin' }
 	return {
 		'access-control-allow-origin': origin,
 		'access-control-allow-credentials': 'true',
@@ -84,4 +118,28 @@ export function withCorsHeaders(req: Request, res: Response): Response {
 		statusText: res.statusText,
 		headers: merged,
 	})
+}
+
+/**
+ * Same as `withCorsHeaders` but mutates the headers in place rather than
+ * re-wrapping the response. Use for streaming responses (SSE) where
+ * re-wrapping the body via `new Response(res.body, ...)` can detach
+ * backpressure or abort linkage on some Node/undici versions.
+ *
+ * Note: Response.headers is read-only on standards-conformant runtimes;
+ * we apply by constructing a new Response only if necessary. For SSE the
+ * intended pattern is to set headers at construction time via a CORS-
+ * aware ResponseInit. This helper is the safe-but-slower middle path.
+ */
+export function applyCorsHeadersStreaming(req: Request, res: Response): Response {
+	// On undici (Vercel/Node) Headers IS mutable on the response object
+	// instance, but the spec says it's not — try mutate, fall back to wrap.
+	const cors = corsHeadersFor(req)
+	if (Object.keys(cors).length === 0) return res
+	try {
+		for (const [k, v] of Object.entries(cors)) res.headers.set(k, v)
+		return res
+	} catch {
+		return withCorsHeaders(req, res)
+	}
 }

@@ -13,9 +13,17 @@
  */
 
 import { getRuntime } from '../../dist/index.js'
-import { SseTokenError, verifySseToken } from '../../dist/auth/sseToken.js'
+import {
+	SseTokenError,
+	verifySseTokenSignatureAndScope,
+	claimSseTokenNonce,
+} from '../../dist/auth/sseToken.js'
 import { openSseEndpoint } from '../../dist/sync/sseEndpoint.js'
-import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
+import {
+	applyCorsHeadersStreaming,
+	preflightResponse,
+	withCorsHeaders,
+} from '../../dist/http/cors.js'
 import type { RoomId } from '@agent-canvas/orchestrator-types'
 
 export const config = {
@@ -47,19 +55,35 @@ export default async function handler(req: Request): Promise<Response> {
 	const nonceCache = runtime.sseNonces
 	if (!nonceCache) return withCorsHeaders(req, jsonError(500, 'sse_nonce_cache_not_initialized'))
 
+	// Two-phase verify: (a) signature/expiry/room scope check up front so
+	// invalid tokens are rejected without ever entering the nonce cache;
+	// (b) nonce-claim ONLY after the SSE stream construction has succeeded.
+	// This way an infrastructure blip on bus.subscribe doesn't burn a
+	// one-shot nonce — the client's reconnect with the same token would
+	// just be `expired` not `replayed`.
+	let claims
 	try {
-		verifySseToken({ token, room_id, secret: sseSecret, nonceCache })
+		claims = verifySseTokenSignatureAndScope({ token, room_id, secret: sseSecret })
 	} catch (err) {
 		const reason = err instanceof SseTokenError ? err.reason : 'sse_token_invalid'
 		return withCorsHeaders(req, jsonError(401, reason))
 	}
 
-	const { response } = openSseEndpoint({
-		room_id,
-		bus,
-		abortSignal: req.signal,
-	})
-	return withCorsHeaders(req, response)
+	let stream
+	try {
+		stream = openSseEndpoint({ room_id, bus, abortSignal: req.signal })
+	} catch {
+		return withCorsHeaders(req, jsonError(500, 'sse_stream_open_failed'))
+	}
+
+	// Stream is live — burn the nonce. Doing this last means a 401-then-
+	// retry with the same token replays cleanly via the signature check
+	// path only; once we hand the stream back, the token is dead.
+	if (!claimSseTokenNonce(claims.nonce, nonceCache)) {
+		return withCorsHeaders(req, jsonError(401, 'replayed'))
+	}
+
+	return applyCorsHeadersStreaming(req, stream.response)
 }
 
 function jsonError(status: number, code: string): Response {

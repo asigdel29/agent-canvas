@@ -39,10 +39,15 @@ export default async function handler(req: Request): Promise<Response> {
 		const body = (await req.json()) as { room_id?: string }
 		room_id = body.room_id
 	} catch {
-		const url = new URL(req.url)
-		room_id = url.searchParams.get('room_id') ?? undefined
+		// Reject malformed JSON outright. The mint endpoint accepts ONLY
+		// a JSON body — no query-string fallback. Picking one transport
+		// closes a foot-gun where a deliberately-malformed body could
+		// bypass future body-shape validation.
+		return withCorsHeaders(req, jsonError(400, 'malformed_json'))
 	}
-	if (!room_id) return withCorsHeaders(req, jsonError(400, 'missing_room_id'))
+	if (!room_id || typeof room_id !== 'string') {
+		return withCorsHeaders(req, jsonError(400, 'missing_room_id'))
+	}
 
 	const token = mintSseToken({
 		sub: session.sub,
@@ -56,7 +61,12 @@ export default async function handler(req: Request): Promise<Response> {
 		req,
 		new Response(JSON.stringify({ token, expires_at }), {
 			status: 200,
-			headers: { 'content-type': 'application/json' },
+			headers: {
+				'content-type': 'application/json',
+				// Block intermediate caches from holding a response that
+				// embeds a freshly-minted credential.
+				'cache-control': 'no-store',
+			},
 		})
 	)
 }

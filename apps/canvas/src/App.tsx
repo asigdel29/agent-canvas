@@ -5,10 +5,13 @@
  * surrounding workspace chrome (connector strip, approval inbox, spend
  * banner) per design review hierarchy.
  *
- * Realtime: if the URL carries `?room=<id>&token=<jwt>`, the app opens
- * a RoomEventClient against the orchestrator's `/api/sync/:room` SSE
- * stream and renders incoming events in the LiveEvents panel. Without
- * those params the canvas runs in standalone demo mode (mocked data).
+ * Realtime: if the URL carries `?room=<id>&session=<jwt>`, the app moves
+ * the session JWT into sessionStorage and strips it from the URL via
+ * `history.replaceState` BEFORE any other code runs. This collapses the
+ * leak window for the long-lived session credential to the single round
+ * trip that delivers the page; CDN access logs, Referer headers, and
+ * browser history never see it. The session is then used to mint
+ * short-lived (60s, single-use) SSE tokens for the realtime stream.
  *
  * Orchestrator base URL: VITE_ORCHESTRATOR_URL (default http://localhost:3000).
  */
@@ -33,19 +36,51 @@ const ORCHESTRATOR_URL =
 		'VITE_ORCHESTRATOR_URL'
 	] ?? 'http://localhost:3000'
 
+const SESSION_STORAGE_KEY = 'agent-canvas:session'
+const ROOM_STORAGE_KEY = 'agent-canvas:room'
+
+/**
+ * Pull the session JWT and room id out of the URL ONCE on first load,
+ * stash them in sessionStorage, and rewrite the URL so the credential
+ * does not survive in history / Referer / CDN access logs.
+ *
+ * Returns whatever pair is available — URL takes precedence on first
+ * load, sessionStorage on subsequent reads (e.g. after replaceState).
+ */
+function intakeAndStashCredentials(): { room: string; session: string } | null {
+	if (typeof window === 'undefined') return null
+	const url = new URL(window.location.href)
+	const urlRoom = url.searchParams.get('room')
+	const urlSession = url.searchParams.get('session')
+	if (urlRoom && urlSession) {
+		try {
+			window.sessionStorage.setItem(SESSION_STORAGE_KEY, urlSession)
+			window.sessionStorage.setItem(ROOM_STORAGE_KEY, urlRoom)
+		} catch {
+			// sessionStorage may be disabled (private mode / iframe sandbox).
+			// Fall through; the URL still carries the values for this load.
+		}
+		url.searchParams.delete('session')
+		url.searchParams.delete('room')
+		window.history.replaceState({}, '', url.toString())
+		return { room: urlRoom, session: urlSession }
+	}
+	try {
+		const room = window.sessionStorage.getItem(ROOM_STORAGE_KEY)
+		const session = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
+		if (room && session) return { room, session }
+	} catch {
+		// ignore
+	}
+	return null
+}
+
 export function App() {
 	const [connectors, setConnectors] = useState<readonly ConnectorTile[]>([])
 	const [approvals, setApprovals] = useState<readonly ApprovalCard[]>([])
 	const [liveEvents, setLiveEvents] = useState<readonly RunEventPayload[]>([])
 
-	const realtime = useMemo(() => {
-		if (typeof window === 'undefined') return null
-		const params = new URLSearchParams(window.location.search)
-		const room = params.get('room')
-		const session = params.get('session')
-		if (!room || !session) return null
-		return { room, session }
-	}, [])
+	const realtime = useMemo(() => intakeAndStashCredentials(), [])
 
 	useEffect(() => {
 		if (!realtime) return
