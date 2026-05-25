@@ -1,23 +1,26 @@
 /**
  * App — the canvas client root.
  *
- * Composes the three-zone Shell (TopBar / LeftRail / canvas /
- * RightRail) plus the floating chrome overlays (toolbar top centre,
- * zoom cluster bottom right). The canvas itself is Tldraw with the
- * agent ShapeUtil registered; when no connectors are configured the
- * canvas area shows the EmptyState card instead.
+ * Top-level state machine has four states:
+ *
+ *   unauthenticated   no session; render <Login>
+ *   onboarding        session exists but ONBOARDING_STORAGE_KEY is
+ *                     unset; render <OnboardingWizard>
+ *   ready             session + onboarded; render the three-zone
+ *                     <Shell> with the canvas
+ *   disconnected      ready, but the realtime client gave up;
+ *                     still render Shell with a DisconnectedBanner
+ *
+ * The login/onboarding/disconnected states reuse the same dark
+ * surface — there is no separate marketing chrome. Sign-in lives at
+ * the same origin as the canvas, so the post-login redirect lands
+ * on `/` with the session fresh in the URL.
  *
  * Realtime: when the URL carries `?room=<id>&session=<jwt>` the app
  * moves the session JWT into sessionStorage and strips it from the
- * URL via history.replaceState BEFORE any other code runs. This
- * collapses the leak window for the long-lived session credential
- * to the single round trip that delivers the page; CDN access logs,
- * Referer headers, and browser history never see it. The session is
- * then used to mint short-lived (60s, single-use) SSE tokens for the
- * realtime stream.
+ * URL via history.replaceState before any other code runs.
  *
- * Orchestrator base URL: VITE_ORCHESTRATOR_URL (default
- * http://localhost:3000).
+ * Orchestrator base URL: VITE_ORCHESTRATOR_URL.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -25,9 +28,15 @@ import { Tldraw } from 'tldraw'
 import 'tldraw/tldraw.css'
 
 import { AgentShapeUtil } from './agent/AgentShapeUtil.js'
+import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
 import { EmptyState, type StarterProvider } from './onboarding/EmptyState.js'
+import {
+	OnboardingWizard,
+	ONBOARDING_STORAGE_KEY,
+} from './onboarding/OnboardingWizard.js'
+import { Login } from './auth/Login.js'
 import { SpendIndicator } from './spend/SpendBanner.js'
 import { Shell } from './layout/Shell.js'
 import { TopBar } from './layout/TopBar.js'
@@ -55,12 +64,13 @@ const ORCHESTRATOR_URL =
 
 const SESSION_STORAGE_KEY = 'agent-canvas:session'
 const ROOM_STORAGE_KEY = 'agent-canvas:room'
+const HANDLE_STORAGE_KEY = 'agent-canvas:handle'
 
 /**
- * Roughly: 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 30s, 30s, ... — 20
- * attempts is roughly 9.5 minutes at the 30s max-backoff cap. After
- * that we give up and surface the disconnected banner so a phone
- * left on a dead network stops draining battery.
+ * 20 attempts (~9.5min at the 30s max-backoff cap) before we give
+ * up reconnecting. A phone left on a dead network stops draining
+ * battery; the user sees the DisconnectedBanner and decides when
+ * to reload.
  */
 const MAX_RECONNECT_ATTEMPTS = 20
 
@@ -76,36 +86,54 @@ const TOOLS: readonly ToolbarTool[] = [
  * Pulls the session JWT and room id out of the URL once on first
  * load, stashes them in sessionStorage, and rewrites the URL so the
  * credential does not survive in history, Referer, or CDN logs.
- *
- * Returns whatever pair is available — URL takes precedence on first
- * load, sessionStorage on subsequent reads.
  */
-function intakeAndStashCredentials(): { room: string; session: string } | null {
+function intakeAndStashCredentials(): {
+	room: string
+	session: string
+	handle: string | null
+} | null {
 	if (typeof window === 'undefined') return null
 	const url = new URL(window.location.href)
 	const urlRoom = url.searchParams.get('room')
 	const urlSession = url.searchParams.get('session')
+	const urlHandle = url.searchParams.get('login_handle')
 	if (urlRoom && urlSession) {
 		try {
 			window.sessionStorage.setItem(SESSION_STORAGE_KEY, urlSession)
 			window.sessionStorage.setItem(ROOM_STORAGE_KEY, urlRoom)
+			if (urlHandle) window.sessionStorage.setItem(HANDLE_STORAGE_KEY, urlHandle)
 		} catch {
 			// sessionStorage may be disabled (private mode, sandboxed iframe).
-			// The URL still carries the values for this load.
 		}
 		url.searchParams.delete('session')
 		url.searchParams.delete('room')
+		url.searchParams.delete('login_provider')
+		url.searchParams.delete('login_handle')
 		window.history.replaceState({}, '', url.toString())
-		return { room: urlRoom, session: urlSession }
+		return { room: urlRoom, session: urlSession, handle: urlHandle }
 	}
 	try {
 		const room = window.sessionStorage.getItem(ROOM_STORAGE_KEY)
 		const session = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
-		if (room && session) return { room, session }
+		const handle = window.sessionStorage.getItem(HANDLE_STORAGE_KEY)
+		if (room && session) return { room, session, handle }
 	} catch {
 		// ignore
 	}
 	return null
+}
+
+function readOnboardedFlag(): boolean {
+	try {
+		return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === '1'
+	} catch {
+		return false
+	}
+}
+
+function readCancelledFlag(): boolean {
+	if (typeof window === 'undefined') return false
+	return new URL(window.location.href).searchParams.get('auth') === 'cancelled'
 }
 
 export function App() {
@@ -119,11 +147,16 @@ export function App() {
 	const [zoomPercent] = useState<number>(100)
 	const [density, setDensity] = useState<'compact' | 'full'>('full')
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
+	const [pendingAgents, setPendingAgents] = useState<readonly NewAgentDraft[]>([])
 
 	const realtime = useMemo(() => intakeAndStashCredentials(), [])
+	const [onboarded, setOnboarded] = useState<boolean>(readOnboardedFlag)
+	const cancelled = useMemo(() => readCancelledFlag(), [])
 
+	// SSE realtime — only when we have a session.
 	useEffect(() => {
-		if (!realtime) return
+		if (!realtime || !onboarded) return
 		const client = new RoomEventClient({
 			url: `${ORCHESTRATOR_URL}/api/sync/${encodeURIComponent(realtime.room)}`,
 			tokenFactory: async () => {
@@ -150,7 +183,15 @@ export function App() {
 			onGiveUp: () => setRealtimeStatus('disconnected'),
 		})
 		return () => client.close()
-	}, [realtime])
+	}, [realtime, onboarded])
+
+	// Open the New Agent modal when the user picks the Agent tool.
+	useEffect(() => {
+		if (activeTool === 'agent') {
+			setAgentModalOpen(true)
+			setActiveTool('select')
+		}
+	}, [activeTool])
 
 	function handleConnect(provider: StarterProvider) {
 		setConnectors((prev) => [
@@ -171,15 +212,29 @@ export function App() {
 		])
 	}
 
-	// Synthesise left-rail rows from current state.
+	function handleCreateAgent(draft: NewAgentDraft) {
+		setPendingAgents((prev) => [...prev, draft])
+		setAgentModalOpen(false)
+		// TODO: drop an AgentShape on the canvas via the tldraw editor
+		// once the editor instance is held in a ref. For this PR the
+		// modal closes and the agent appears in the LeftRail "Workflows"
+		// section so the user has feedback that creation worked.
+	}
+
 	const workflowItems: readonly RailItem[] = useMemo(
-		() =>
-			connectors.map((c) => ({
+		() => [
+			...pendingAgents.map((a, i) => ({
+				id: `agent:${i}`,
+				label: a.name,
+				sublabel: capsOneLine(a),
+			})),
+			...connectors.map((c) => ({
 				id: `wf:${c.id}`,
 				label: `${c.label} workflow`,
 				sublabel: 'no runs yet',
 			})),
-		[connectors]
+		],
+		[pendingAgents, connectors]
 	)
 
 	const runItems: readonly RailItem[] = useMemo(() => {
@@ -199,8 +254,23 @@ export function App() {
 		}))
 	}, [liveEvents])
 
+	// Routing.
+	if (!realtime) {
+		return <Login orchestratorUrl={ORCHESTRATOR_URL} cancelled={cancelled} />
+	}
+	if (!onboarded) {
+		return (
+			<OnboardingWizard
+				displayName={realtime.handle ?? undefined}
+				onComplete={() => setOnboarded(true)}
+				onSkip={() => setOnboarded(true)}
+			/>
+		)
+	}
+
 	const hasAnyConnector = connectors.length > 0
-	const showEmptyState = !hasAnyConnector && !realtime
+	const hasAnyAgent = pendingAgents.length > 0
+	const showEmptyState = !hasAnyConnector && !hasAnyAgent
 
 	const rightRailMode: RightRailMode = selectedRunId
 		? 'inspector'
@@ -209,83 +279,111 @@ export function App() {
 			: 'empty'
 
 	return (
-		<Shell
-			topBar={
-				<TopBar
-					workspaceName="Untitled workspace"
-					breadcrumbs={['canvas', 'starter']}
-					presenceAvatars={[{ id: 'u_anu', label: 'Anu', color: 'var(--accent)' }]}
-					spend={<SpendIndicator accrued_micros={3_420_000} ceiling_micros={50_000_000} />}
-				/>
-			}
-			leftRail={
-				<>
-					<LeftRail
-						workflows={workflowItems}
-						runs={runItems}
-						selectedId={selectedRunId}
-						onSelect={setSelectedRunId}
+		<>
+			<Shell
+				topBar={
+					<TopBar
+						workspaceName={realtime.handle ? `${realtime.handle}'s workspace` : 'Untitled workspace'}
+						breadcrumbs={['canvas']}
+						presenceAvatars={[
+							{
+								id: realtime.handle ?? 'u',
+								label: realtime.handle ?? 'You',
+								color: 'var(--accent)',
+							},
+						]}
+						spend={
+							<SpendIndicator accrued_micros={3_420_000} ceiling_micros={50_000_000} />
+						}
 					/>
-					<ConnectorStrip
-						tiles={connectors}
-						onClick={() => {
-							/* connector settings — wire in a follow-up */
-						}}
-					/>
-				</>
-			}
-			rightRail={
-				<RightRail
-					mode={rightRailMode}
-					inspectorContent={
-						selectedRunId ? (
-							<InspectorPlaceholder runId={selectedRunId} events={liveEvents} />
-						) : null
-					}
-					activityEvents={liveEvents}
-					approvalsContent={
-						<ApprovalInbox
-							cards={approvals}
-							onApprove={(card) =>
-								setApprovals((p) => p.filter((c) => c.id !== card.id))
-							}
-							onReject={(card) =>
-								setApprovals((p) => p.filter((c) => c.id !== card.id))
-							}
-						/>
-					}
-				/>
-			}
-			overlays={
-				!showEmptyState ? (
+				}
+				leftRail={
 					<>
-						<FloatingToolbar tools={TOOLS} activeId={activeTool} onSelect={setActiveTool} />
-						<ZoomCluster
-							zoomPercent={zoomPercent}
-							density={density}
-							onDensityToggle={() =>
-								setDensity((d) => (d === 'compact' ? 'full' : 'compact'))
-							}
+						<LeftRail
+							workflows={workflowItems}
+							runs={runItems}
+							selectedId={selectedRunId}
+							onSelect={setSelectedRunId}
+							onNewWorkflow={() => setAgentModalOpen(true)}
 						/>
-						{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
+						<ConnectorStrip
+							tiles={connectors}
+							onClick={() => {
+								/* connector settings — wire in a follow-up */
+							}}
+						/>
 					</>
-				) : null
-			}
-		>
-			{showEmptyState ? (
-				<EmptyState onConnect={handleConnect} />
-			) : (
-				<Tldraw shapeUtils={SHAPE_UTILS} />
-			)}
-		</Shell>
+				}
+				rightRail={
+					<RightRail
+						mode={rightRailMode}
+						inspectorContent={
+							selectedRunId ? (
+								<InspectorPlaceholder runId={selectedRunId} events={liveEvents} />
+							) : null
+						}
+						activityEvents={liveEvents}
+						approvalsContent={
+							<ApprovalInbox
+								cards={approvals}
+								onApprove={(card) =>
+									setApprovals((p) => p.filter((c) => c.id !== card.id))
+								}
+								onReject={(card) =>
+									setApprovals((p) => p.filter((c) => c.id !== card.id))
+								}
+							/>
+						}
+					/>
+				}
+				overlays={
+					!showEmptyState ? (
+						<>
+							<FloatingToolbar
+								tools={TOOLS}
+								activeId={activeTool}
+								onSelect={setActiveTool}
+							/>
+							<ZoomCluster
+								zoomPercent={zoomPercent}
+								density={density}
+								onDensityToggle={() =>
+									setDensity((d) => (d === 'compact' ? 'full' : 'compact'))
+								}
+							/>
+							{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
+						</>
+					) : null
+				}
+			>
+				{showEmptyState ? (
+					<EmptyState onConnect={handleConnect} />
+				) : (
+					<Tldraw shapeUtils={SHAPE_UTILS} />
+				)}
+			</Shell>
+
+			<NewAgentModal
+				open={agentModalOpen}
+				onCreate={handleCreateAgent}
+				onClose={() => setAgentModalOpen(false)}
+			/>
+		</>
 	)
 }
 
+function capsOneLine(a: NewAgentDraft): string {
+	const bits: string[] = []
+	if (a.capabilities.computer_use.enabled) bits.push('computer')
+	if (a.capabilities.browser_use.enabled) bits.push('browser')
+	if (a.capabilities.mcp_servers.length > 0) bits.push(`${a.capabilities.mcp_servers.length} MCP`)
+	return bits.length > 0 ? bits.join(' · ') : a.purpose || 'no capabilities'
+}
+
 /**
- * Disconnected banner — fires once the RoomEventClient gives up on
- * reconnecting. Tells the user the live feed stopped and offers a
- * single reload affordance. Auto-reload is deliberately avoided
- * because the user may be mid-edit.
+ * Disconnected banner — fires once the RoomEventClient gives up.
+ * Tells the user the live feed stopped and offers a single reload
+ * affordance. Auto-reload is avoided because the user may be mid-edit.
  */
 function DisconnectedBanner() {
 	return (
@@ -333,9 +431,8 @@ function DisconnectedBanner() {
 }
 
 /**
- * Minimal inspector body until a real shape inspector lands in a
- * follow-up. Shows the run id and a short event history so the
- * right rail isn't empty when something is selected.
+ * Minimal inspector body. Shows the run id and a short event
+ * history; richer per-shape inspector lands in a follow-up.
  */
 function InspectorPlaceholder({
 	runId,

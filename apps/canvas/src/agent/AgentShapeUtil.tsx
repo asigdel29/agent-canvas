@@ -20,6 +20,7 @@ import {
 	T,
 } from 'tldraw'
 
+import { summarizeCapabilities } from './capabilities.js'
 import type { RenderMode } from './density.js'
 
 export interface AgentShapeProps {
@@ -42,6 +43,17 @@ export interface AgentShapeProps {
 	w: number
 	h: number
 	render_mode: RenderMode
+	/**
+	 * Capability flags serialized in tlschema-compatible primitives. We
+	 * keep them flat rather than a nested object because tldraw's
+	 * RecordProps validator chain is awkward to use with nested unions;
+	 * the canvas-side capabilities.ts type does the reassembly.
+	 */
+	cap_computer_use: boolean
+	cap_browser_use: boolean
+	cap_mcp_server_ids: string[]
+	/** One-line summary shown in the compact mode footer; recomputed on capability change. */
+	cap_summary: string
 }
 
 export type AgentShape = TLBaseShape<'agent', AgentShapeProps>
@@ -82,6 +94,10 @@ export class AgentShapeUtil extends ShapeUtil<AgentShape> {
 		w: T.nonZeroNumber,
 		h: T.nonZeroNumber,
 		render_mode: T.literalEnum('full', 'compact'),
+		cap_computer_use: T.boolean,
+		cap_browser_use: T.boolean,
+		cap_mcp_server_ids: T.arrayOf(T.string),
+		cap_summary: T.string,
 	}
 
 	override getDefaultProps(): AgentShape['props'] {
@@ -95,8 +111,12 @@ export class AgentShapeUtil extends ShapeUtil<AgentShape> {
 			last_event_seq: 0,
 			last_event_at: new Date().toISOString(),
 			w: 320,
-			h: 120,
+			h: 140,
 			render_mode: 'full',
+			cap_computer_use: false,
+			cap_browser_use: false,
+			cap_mcp_server_ids: [],
+			cap_summary: 'no capabilities',
 		}
 	}
 
@@ -107,36 +127,43 @@ export class AgentShapeUtil extends ShapeUtil<AgentShape> {
 	override component(shape: AgentShape) {
 		const isCompact = shape.props.render_mode === 'compact'
 		const isCrossRoom = shape.props.origin_room_id !== shape.props.current_room_id
+		const isRunning = shape.props.status === 'running'
 		return (
 			<HTMLContainer
 				style={{
 					display: 'flex',
 					flexDirection: 'column',
 					padding: 'var(--space-3)',
-					border: '1px solid var(--border)',
+					border: `1px solid ${isRunning ? 'var(--live)' : 'var(--border)'}`,
 					borderRadius: 'var(--radius-lg)',
 					background: 'var(--surface-elev)',
 					fontFamily: 'var(--font-ui)',
 					color: 'var(--text-strong)',
 					boxSizing: 'border-box',
 					overflow: 'hidden',
+					gap: 'var(--space-1)',
 				}}
 			>
 				<header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-					<strong style={{ fontSize: 14, fontWeight: 500 }}>{shape.props.title || shape.props.run_id}</strong>
+					<strong style={{ fontSize: 14, fontWeight: 500 }}>
+						{shape.props.title || shape.props.run_id}
+					</strong>
 					<StatusBadge status={shape.props.status} />
 				</header>
-				{isCrossRoom ? (
-					<span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
+				{isCrossRoom && (
+					<span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
 						from {shape.props.origin_room_id}
 					</span>
-				) : null}
-				{!isCompact ? (
-					<div style={{ marginTop: 'var(--space-2)', fontSize: 12, color: 'var(--text-muted)' }}>
-						<span style={{ fontFamily: 'var(--font-mono)' }}>seq {shape.props.last_event_seq}</span>
-						{shape.props.vendor ? <span> · {shape.props.vendor}</span> : null}
-					</div>
-				) : null}
+				)}
+				{!isCompact && (
+					<>
+						<div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+							<span style={{ fontFamily: 'var(--font-mono)' }}>seq {shape.props.last_event_seq}</span>
+							{shape.props.vendor && <span> · {shape.props.vendor}</span>}
+						</div>
+						<CapabilityRow shape={shape} />
+					</>
+				)}
 			</HTMLContainer>
 		)
 	}
@@ -152,7 +179,7 @@ function StatusBadge({ status }: { status: AgentShape['props']['status'] }) {
 	const colorMap: Record<AgentShape['props']['status'], string> = {
 		queued: 'var(--text-muted)',
 		provisioning: 'var(--text-muted)',
-		running: 'var(--text-strong)',
+		running: 'var(--live)',
 		awaiting_input: 'var(--status-await)',
 		succeeded: 'var(--status-succ)',
 		failed: 'var(--status-fail)',
@@ -169,6 +196,7 @@ function StatusBadge({ status }: { status: AgentShape['props']['status'] }) {
 		cancelled: 'Cancelled',
 		unreachable: 'Unreachable',
 	}
+	const isLive = status === 'running'
 	return (
 		<span
 			style={{
@@ -179,11 +207,74 @@ function StatusBadge({ status }: { status: AgentShape['props']['status'] }) {
 				borderRadius: 999,
 				fontSize: 11,
 				fontWeight: 500,
-				background: 'rgba(0,0,0,0.04)',
+				background: isLive ? 'var(--live-soft)' : 'var(--surface-overlay)',
 				color: colorMap[status],
 			}}
 		>
+			{isLive && <span className="ac-live-dot" aria-hidden="true" />}
 			{labelMap[status]}
+		</span>
+	)
+}
+
+/**
+ * Inline row of capability chips rendered in non-compact mode. Each
+ * chip uses the surface-overlay wash so they sit quietly under the
+ * primary status badge. We deliberately do not render the row when
+ * the agent has no capabilities — empty chrome is worse than no
+ * chrome.
+ */
+function CapabilityRow({ shape }: { shape: AgentShape }) {
+	const chips: { label: string; tone: 'neutral' | 'accent' | 'live' }[] = []
+	if (shape.props.cap_computer_use) chips.push({ label: 'computer', tone: 'live' })
+	if (shape.props.cap_browser_use) chips.push({ label: 'browser', tone: 'accent' })
+	if (shape.props.cap_mcp_server_ids.length > 0) {
+		chips.push({
+			label:
+				shape.props.cap_mcp_server_ids.length === 1
+					? '1 MCP'
+					: `${shape.props.cap_mcp_server_ids.length} MCPs`,
+			tone: 'neutral',
+		})
+	}
+	if (chips.length === 0) return null
+	return (
+		<div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 'var(--space-1)' }}>
+			{chips.map((c) => (
+				<Chip key={c.label} tone={c.tone}>
+					{c.label}
+				</Chip>
+			))}
+		</div>
+	)
+}
+
+function Chip({
+	tone,
+	children,
+}: {
+	tone: 'neutral' | 'accent' | 'live'
+	children: React.ReactNode
+}) {
+	const palette: Record<typeof tone, { bg: string; fg: string }> = {
+		neutral: { bg: 'var(--surface-overlay)', fg: 'var(--text-muted)' },
+		accent: { bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+		live: { bg: 'var(--live-soft)', fg: 'var(--live)' },
+	}
+	return (
+		<span
+			style={{
+				padding: '1px 6px',
+				borderRadius: 999,
+				background: palette[tone].bg,
+				color: palette[tone].fg,
+				fontSize: 10,
+				fontFamily: 'var(--font-mono)',
+				fontWeight: 500,
+				letterSpacing: 0.2,
+			}}
+		>
+			{children}
 		</span>
 	)
 }
