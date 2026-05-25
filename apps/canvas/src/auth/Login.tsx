@@ -151,6 +151,23 @@ export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 					We request <code style={{ fontFamily: 'var(--font-mono)' }}>read:user</code> and{' '}
 					<code style={{ fontFamily: 'var(--font-mono)' }}>user:email</code> from GitHub —
 					only enough to identify you. No repos read, no code written.
+					<br />
+					<br />
+					By signing in you agree to the{' '}
+					<a
+						href="/tos"
+						style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+					>
+						Terms
+					</a>{' '}
+					and{' '}
+					<a
+						href="/privacy"
+						style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+					>
+						Privacy Policy
+					</a>
+					.
 				</footer>
 			</section>
 		</div>
