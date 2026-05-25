@@ -28,6 +28,7 @@
 import { getRuntime } from '../../dist/index.js'
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
+import { auditAndDispatch } from '../../dist/audit/auditAndDispatch.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import {
 	ROLE_RANK,
@@ -63,10 +64,14 @@ export default async function handler(req: Request): Promise<Response> {
 	const runtime = getRuntime() as unknown as {
 		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
 		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
+		webhookEndpointStore?: import('../../dist/webhooks/webhookEndpointStore.js').WebhookEndpointStore
+		webhookDeliveryStore?: import('../../dist/webhooks/webhookDeliveryStore.js').WebhookDeliveryStore
 	}
 	const tenancy = runtime.tenancyStore
 	const audit = runtime.workspaceAuditStore
-	if (!tenancy || !audit) {
+	const endpointStore = runtime.webhookEndpointStore
+	const deliveryStore = runtime.webhookDeliveryStore
+	if (!tenancy || !audit || !endpointStore || !deliveryStore) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -126,16 +131,17 @@ export default async function handler(req: Request): Promise<Response> {
 			)
 		}
 		const m = await tenancy.addMember(workspace_id, invitee.id, role)
-		void audit
-			.append({
+		void auditAndDispatch(
+			{ audit, endpointStore, deliveryStore },
+			{
 				workspace_id,
 				actor_user_id: actor,
 				action: 'member.added',
 				target_type: 'workspace_member',
 				target_id: invitee.id,
 				details: { github_login: invitee.github_login, role },
-			})
-			.catch(() => undefined)
+			}
+		)
 		return withCorsHeaders(
 			req,
 			new Response(JSON.stringify({ membership: m, user: invitee }), {
@@ -168,16 +174,17 @@ export default async function handler(req: Request): Promise<Response> {
 		try {
 			const updated = await tenancy.setMemberRole(workspace_id, target_user_id, role)
 			if (!updated) return withCorsHeaders(req, jsonError(404, 'member_not_found'))
-			void audit
-				.append({
+			void auditAndDispatch(
+				{ audit, endpointStore, deliveryStore },
+				{
 					workspace_id,
 					actor_user_id: actor,
 					action: 'member.role_changed',
 					target_type: 'workspace_member',
 					target_id: target_user_id,
 					details: { from_role: current.role, to_role: role },
-				})
-				.catch(() => undefined)
+				}
+			)
 			return withCorsHeaders(
 				req,
 				new Response(JSON.stringify({ membership: updated }), {
@@ -205,16 +212,17 @@ export default async function handler(req: Request): Promise<Response> {
 		try {
 			const removed = await tenancy.removeMember(workspace_id, target_user_id)
 			if (!removed) return withCorsHeaders(req, jsonError(404, 'member_not_found'))
-			void audit
-				.append({
+			void auditAndDispatch(
+				{ audit, endpointStore, deliveryStore },
+				{
 					workspace_id,
 					actor_user_id: actor,
 					action: 'member.removed',
 					target_type: 'workspace_member',
 					target_id: target_user_id,
 					details: { prior_role: current.role },
-				})
-				.catch(() => undefined)
+				}
+			)
 			return withCorsHeaders(req, new Response(null, { status: 204 }))
 		} catch (err) {
 			if (err instanceof Error && err.name === 'TenancyForbiddenError') {

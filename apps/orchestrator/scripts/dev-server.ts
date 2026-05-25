@@ -69,6 +69,7 @@ import checkoutSessionHandler from '../api/billing/checkout-session.js'
 import portalSessionHandler from '../api/billing/portal-session.js'
 import billingStatusHandler from '../api/billing/status.js'
 import drainWebhooksHandler from '../api/admin/webhooks/drain.js'
+import cronDrainWebhooksHandler from '../api/cron/drain-webhooks.js'
 import approvalsIndexHandler from '../api/approvals/index.js'
 import approvalByIdHandler from '../api/approvals/[id].js'
 import syncHandler from '../api/sync/[room].js'
@@ -177,6 +178,9 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	}
 	if (pathname === '/api/admin/webhooks/drain' && (method === 'POST' || opts)) {
 		return drainWebhooksHandler
+	}
+	if (pathname === '/api/cron/drain-webhooks' && (method === 'GET' || opts)) {
+		return cronDrainWebhooksHandler
 	}
 	// Outbound webhook management — list / register / revoke.
 	// Matched BEFORE the inbound /api/webhooks/:provider route so a

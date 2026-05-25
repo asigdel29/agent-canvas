@@ -11,6 +11,7 @@
 import { getRuntime } from '../../dist/index.js'
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
+import { auditAndDispatch } from '../../dist/audit/auditAndDispatch.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 
 export default async function handler(req: Request): Promise<Response> {
@@ -27,11 +28,13 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const runtime = getRuntime() as unknown as {
 		webhookEndpointStore?: import('../../dist/webhooks/webhookEndpointStore.js').WebhookEndpointStore
+		webhookDeliveryStore?: import('../../dist/webhooks/webhookDeliveryStore.js').WebhookDeliveryStore
 		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
 	}
 	const store = runtime.webhookEndpointStore
+	const deliveryStore = runtime.webhookDeliveryStore
 	const audit = runtime.workspaceAuditStore
-	if (!store || !audit) {
+	if (!store || !deliveryStore || !audit) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -49,16 +52,17 @@ export default async function handler(req: Request): Promise<Response> {
 				return 'unknown'
 			}
 		})()
-		void audit
-			.append({
+		void auditAndDispatch(
+			{ audit, endpointStore: store, deliveryStore },
+			{
 				workspace_id: revoked.workspace_id,
 				actor_user_id: session.sub as UserId,
 				action: 'webhook.revoked',
 				target_type: 'webhook_endpoint',
 				target_id: revoked.id,
 				details: { url_host: urlHost },
-			})
-			.catch(() => undefined)
+			}
+		)
 	}
 	return withCorsHeaders(req, new Response(null, { status: 204 }))
 }

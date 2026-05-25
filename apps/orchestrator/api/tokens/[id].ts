@@ -16,6 +16,7 @@
 import { getRuntime } from '../../dist/index.js'
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
+import { auditAndDispatch } from '../../dist/audit/auditAndDispatch.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 
 export default async function handler(req: Request): Promise<Response> {
@@ -33,10 +34,14 @@ export default async function handler(req: Request): Promise<Response> {
 	const runtime = getRuntime() as unknown as {
 		apiTokenStore?: import('../../dist/tokens/apiTokenStore.js').ApiTokenStore
 		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
+		webhookEndpointStore?: import('../../dist/webhooks/webhookEndpointStore.js').WebhookEndpointStore
+		webhookDeliveryStore?: import('../../dist/webhooks/webhookDeliveryStore.js').WebhookDeliveryStore
 	}
 	const store = runtime.apiTokenStore
 	const audit = runtime.workspaceAuditStore
-	if (!store || !audit) {
+	const endpointStore = runtime.webhookEndpointStore
+	const deliveryStore = runtime.webhookDeliveryStore
+	if (!store || !audit || !endpointStore || !deliveryStore) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -47,18 +52,20 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const revoked = await store.revoke(id, session.sub as UserId)
 	if (revoked) {
-		// Audit only when an actual revoke happened. Oracle defense
-		// already lives at the response layer (204 either way).
-		void audit
-			.append({
+		// Audit + webhook fan-out only when an actual revoke happened.
+		// Oracle defense already lives at the response layer (204
+		// either way).
+		void auditAndDispatch(
+			{ audit, endpointStore, deliveryStore },
+			{
 				workspace_id: revoked.workspace_id,
 				actor_user_id: session.sub as UserId,
 				action: 'token.revoked',
 				target_type: 'api_token',
 				target_id: revoked.id,
 				details: { token_prefix: revoked.token_prefix },
-			})
-			.catch(() => undefined)
+			}
+		)
 	}
 	return withCorsHeaders(req, new Response(null, { status: 204 }))
 }
