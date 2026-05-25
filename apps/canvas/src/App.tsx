@@ -37,6 +37,7 @@ import {
 import { agentShapeId, recordToShapeProps } from './agent/agentToShape.js'
 import { ErrorToast, type ErrorCard } from './errors/ErrorToast.js'
 import { SettingsDrawer } from './settings/SettingsDrawer.js'
+import { FeedbackModal } from './feedback/FeedbackModal.js'
 import { track } from './analytics/posthog.js'
 import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
@@ -157,8 +158,10 @@ export function App() {
 	const [density, setDensity] = useState<'compact' | 'full'>('full')
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 	const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
+	const [feedbackOpen, setFeedbackOpen] = useState<boolean>(false)
 	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
 	const [agentModalInitial, setAgentModalInitial] = useState<NewAgentDraft | null>(null)
+	const [agentModalEditingId, setAgentModalEditingId] = useState<string | null>(null)
 	const [agents, setAgents] = useState<readonly AgentApiRecord[]>([])
 	const [errorCards, setErrorCards] = useState<readonly ErrorCard[]>([])
 	const [liveApprovals, setLiveApprovals] = useState<readonly PendingApprovalDto[]>([])
@@ -392,6 +395,46 @@ export function App() {
 	 * results stream in over SSE and update the AgentShape's
 	 * status field through the existing event subscriber.
 	 */
+	function handleOpenEdit(agent: AgentApiRecord) {
+		setAgentModalEditingId(agent.id)
+		setAgentModalInitial({
+			name: agent.name,
+			purpose: agent.purpose,
+			model: agent.model as NewAgentDraft['model'],
+			system_prompt: agent.system_prompt,
+			capabilities: agent.capabilities,
+		})
+		setAgentModalOpen(true)
+	}
+
+	async function handleSaveAgent(draft: NewAgentDraft) {
+		if (!agentApi || !agentModalEditingId) return
+		try {
+			const updated = await agentApi.update(agentModalEditingId, draft)
+			setAgents((prev) =>
+				prev.map((a) => (a.id === updated.id ? updated : a))
+			)
+			setAgentModalOpen(false)
+			setAgentModalEditingId(null)
+			setAgentModalInitial(null)
+			// Refresh the shape on the canvas with the new capability
+			// chips + cap_summary so the visible state matches the record.
+			const editor = editorRef.current
+			if (editor && realtime) {
+				const shapeId = agentShapeId(updated.id)
+				if (editor.getShape(shapeId as never)) {
+					editor.updateShape({
+						id: shapeId as never,
+						type: 'agent',
+						props: recordToShapeProps(updated, realtime.room),
+					})
+				}
+			}
+		} catch (err) {
+			pushError(toErrorCard(err, 'save agent', () => setSettingsOpen(true)))
+		}
+	}
+
 	async function handleRunAgent(agentId: string, initialMessage: string) {
 		if (!agentApi) return
 		try {
@@ -571,6 +614,7 @@ export function App() {
 								return !s
 							})
 						}}
+						onFeedbackClick={() => setFeedbackOpen(true)}
 					/>
 				}
 				leftRail={
@@ -600,6 +644,7 @@ export function App() {
 								agents={agents}
 								events={liveEvents}
 								onRun={(agentId, message) => handleRunAgent(agentId, message)}
+								onEdit={(agent) => handleOpenEdit(agent)}
 							/>
 							) : null
 						}
@@ -691,11 +736,21 @@ export function App() {
 			<NewAgentModal
 				open={agentModalOpen}
 				initialDraft={agentModalInitial}
+				editingAgentId={agentModalEditingId}
 				onCreate={handleCreateAgent}
+				onSave={handleSaveAgent}
 				onClose={() => {
 					setAgentModalOpen(false)
 					setAgentModalInitial(null)
+					setAgentModalEditingId(null)
 				}}
+			/>
+			<FeedbackModal
+				open={feedbackOpen}
+				orchestratorUrl={ORCHESTRATOR_URL}
+				session={realtime.session}
+				recentEvents={liveEvents.slice(-20) as unknown as Record<string, unknown>[]}
+				onClose={() => setFeedbackOpen(false)}
 			/>
 		</>
 	)
@@ -776,15 +831,19 @@ function SelectionInspector({
 	agents,
 	events,
 	onRun,
+	onEdit,
 }: {
 	selectedId: string
 	agents: readonly AgentApiRecord[]
 	events: readonly RunEventPayload[]
 	onRun: (agentId: string, message: string) => void
+	onEdit?: (agent: AgentApiRecord) => void
 }) {
 	const agent = agents.find((a) => a.id === selectedId)
 	if (agent) {
-		return <AgentRunPanel agent={agent} events={events} onRun={onRun} />
+		return (
+			<AgentRunPanel agent={agent} events={events} onRun={onRun} onEdit={onEdit} />
+		)
 	}
 	return <RunDetailPanel runId={selectedId} events={events} />
 }
@@ -793,32 +852,72 @@ function AgentRunPanel({
 	agent,
 	events,
 	onRun,
+	onEdit,
 }: {
 	agent: AgentApiRecord
 	events: readonly RunEventPayload[]
 	onRun: (agentId: string, message: string) => void
+	onEdit?: ((agent: AgentApiRecord) => void) | undefined
 }) {
 	const [message, setMessage] = useState<string>('')
 	const recent = events.filter((e) => e.run_id.startsWith('run_')).slice(-10)
 	return (
 		<div style={{ padding: 'var(--space-3)', display: 'grid', gap: 'var(--space-3)' }}>
 			<Section label="Agent">
-				<div style={{ display: 'grid', gap: 2 }}>
-					<span style={{ fontSize: 'var(--font-13)', fontWeight: 500 }}>{agent.name}</span>
-					{agent.purpose && (
-						<span style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>
-							{agent.purpose}
+				<div
+					style={{
+						display: 'grid',
+						gridTemplateColumns: '1fr auto',
+						gap: 'var(--space-2)',
+						alignItems: 'flex-start',
+					}}
+				>
+					<div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+						<span style={{ fontSize: 'var(--font-13)', fontWeight: 500 }}>
+							{agent.name}
 						</span>
+						{agent.purpose && (
+							<span
+								style={{
+									fontSize: 'var(--font-12)',
+									color: 'var(--text-muted)',
+								}}
+							>
+								{agent.purpose}
+							</span>
+						)}
+						<span
+							style={{
+								fontFamily: 'var(--font-mono)',
+								fontSize: 11,
+								color: 'var(--text-muted)',
+							}}
+						>
+							{agent.model}
+						</span>
+					</div>
+					{onEdit && (
+						<button
+							type="button"
+							onClick={() => onEdit(agent)}
+							title="Edit prompt or capabilities"
+							style={{
+								height: 24,
+								padding: '0 var(--space-2)',
+								background: 'transparent',
+								color: 'var(--text-muted)',
+								border: '1px solid var(--border)',
+								borderRadius: 'var(--radius-md)',
+								font: 'inherit',
+								fontFamily: 'var(--font-ui)',
+								fontSize: 11,
+								fontWeight: 500,
+								cursor: 'pointer',
+							}}
+						>
+							Edit
+						</button>
 					)}
-					<span
-						style={{
-							fontFamily: 'var(--font-mono)',
-							fontSize: 11,
-							color: 'var(--text-muted)',
-						}}
-					>
-						{agent.model}
-					</span>
 				</div>
 			</Section>
 

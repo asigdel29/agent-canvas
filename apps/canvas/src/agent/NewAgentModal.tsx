@@ -67,6 +67,15 @@ export interface NewAgentModalProps {
 	 * resets to blank.
 	 */
 	readonly initialDraft?: NewAgentDraft | null | undefined
+	/**
+	 * When set, the modal is in EDIT mode for an existing agent.
+	 * The title and primary button label flip ('Edit agent' /
+	 * 'Save changes'), and submit is wired to `onSave` instead
+	 * of `onCreate`. Both callbacks coexist so a single modal
+	 * handles create + edit without two component copies.
+	 */
+	readonly editingAgentId?: string | null | undefined
+	readonly onSave?: (draft: NewAgentDraft) => void
 }
 
 export function NewAgentModal({
@@ -74,7 +83,10 @@ export function NewAgentModal({
 	onCreate,
 	onClose,
 	initialDraft,
+	editingAgentId,
+	onSave,
 }: NewAgentModalProps) {
+	const isEditing = Boolean(editingAgentId)
 	const [name, setName] = useState('')
 	const [purpose, setPurpose] = useState('')
 	const [model, setModel] = useState<ModelId>('claude-sonnet-4-6')
@@ -123,13 +135,18 @@ export function NewAgentModal({
 
 	function submit() {
 		if (!name.trim()) return
-		onCreate({
+		const draft: NewAgentDraft = {
 			name: name.trim(),
 			purpose: purpose.trim(),
 			model,
 			system_prompt: systemPrompt.trim(),
 			capabilities,
-		})
+		}
+		if (isEditing && onSave) {
+			onSave(draft)
+		} else {
+			onCreate(draft)
+		}
 	}
 
 	if (!open) return null
@@ -185,7 +202,7 @@ export function NewAgentModal({
 							letterSpacing: -0.2,
 						}}
 					>
-						New agent
+						{isEditing ? 'Edit agent' : 'New agent'}
 					</h2>
 					<button
 						type="button"
@@ -272,7 +289,7 @@ export function NewAgentModal({
 						}}
 					>
 						<span style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>
-							⌘ Enter to create
+							{isEditing ? '⌘ Enter to save' : '⌘ Enter to create'}
 						</span>
 						<div style={{ display: 'flex', gap: 'var(--space-2)' }}>
 							<button
@@ -310,7 +327,7 @@ export function NewAgentModal({
 									cursor: name.trim() ? 'pointer' : 'not-allowed',
 								}}
 							>
-								Create agent
+								{isEditing ? 'Save changes' : 'Create agent'}
 							</button>
 						</div>
 					</footer>
@@ -620,6 +637,19 @@ function McpServersEditor({
 	)
 }
 
+/**
+ * Probe state for the inline MCP test button.
+ *   idle       no probe attempted yet
+ *   probing    request in flight (button greys out)
+ *   ok         server reachable; show tool count
+ *   error      server unreachable; show the orchestrator's reason
+ */
+type ProbeState =
+	| { kind: 'idle' }
+	| { kind: 'probing' }
+	| { kind: 'ok'; tool_count: number }
+	| { kind: 'error'; message: string }
+
 function McpRow({
 	server,
 	onChange,
@@ -629,67 +659,192 @@ function McpRow({
 	onChange: (patch: Partial<McpServerRef>) => void
 	onRemove: () => void
 }) {
+	const [probe, setProbe] = useState<ProbeState>({ kind: 'idle' })
+
+	async function runProbe() {
+		const url = server.url.trim()
+		if (!url) {
+			setProbe({ kind: 'error', message: 'URL is empty' })
+			return
+		}
+		setProbe({ kind: 'probing' })
+		try {
+			// Same authorization the rest of agentApi uses. We read the
+			// session JWT from sessionStorage directly here so this row
+			// doesn't need to be threaded through a context.
+			const orchestratorUrl =
+				(import.meta as unknown as { env?: Record<string, string> }).env?.[
+					'VITE_ORCHESTRATOR_URL'
+				] ?? 'http://localhost:3000'
+			const session =
+				(typeof window !== 'undefined' &&
+					window.sessionStorage.getItem('agent-canvas:session')) ||
+				''
+			const res = await fetch(`${orchestratorUrl}/api/agents/probe-mcp`, {
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${session}`,
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					url,
+					...(server.auth?.type === 'bearer' && server.auth.token
+						? { auth: { type: 'bearer', token: server.auth.token } }
+						: {}),
+				}),
+			})
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { detail?: string }
+				setProbe({
+					kind: 'error',
+					message: body.detail ?? `HTTP ${res.status}`,
+				})
+				return
+			}
+			const body = (await res.json()) as { count: number }
+			setProbe({ kind: 'ok', tool_count: body.count })
+		} catch (err) {
+			setProbe({
+				kind: 'error',
+				message: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
+	const probeLabel =
+		probe.kind === 'probing'
+			? '…'
+			: probe.kind === 'ok'
+				? `✓ ${probe.tool_count}`
+				: probe.kind === 'error'
+					? '✗'
+					: 'Test'
+	const probeColor =
+		probe.kind === 'ok'
+			? 'var(--status-succ)'
+			: probe.kind === 'error'
+				? 'var(--live)'
+				: 'var(--text-muted)'
+
 	return (
-		<div
-			style={{
-				display: 'grid',
-				gridTemplateColumns: '120px 1fr auto auto',
-				gap: 'var(--space-2)',
-				alignItems: 'center',
-			}}
-		>
-			<input
-				type="text"
-				value={server.id}
-				onChange={(e) => onChange({ id: e.target.value })}
-				placeholder="id"
-				style={{ ...inputStyle, fontSize: 'var(--font-12)', padding: '6px var(--space-2)' }}
-			/>
-			<input
-				type="url"
-				value={server.url}
-				onChange={(e) => onChange({ url: e.target.value })}
-				placeholder="https://mcp.example.com/sse"
-				style={{ ...inputStyle, fontSize: 'var(--font-12)', padding: '6px var(--space-2)' }}
-			/>
-			<select
-				value={server.trust}
-				onChange={(e) => onChange({ trust: e.target.value as 'trusted' | 'untrusted' })}
+		<div style={{ display: 'grid', gap: 4 }}>
+			<div
 				style={{
-					height: 28,
-					padding: '0 var(--space-2)',
-					background: 'var(--surface-elev)',
-					border: '1px solid var(--border)',
-					borderRadius: 'var(--radius-md)',
-					color: 'var(--text-strong)',
-					font: 'inherit',
-					fontFamily: 'var(--font-ui)',
-					fontSize: 'var(--font-12)',
-				}}
-				title="Trusted servers can have their tools called without per-call confirmation."
-			>
-				<option value="untrusted">untrusted</option>
-				<option value="trusted">trusted</option>
-			</select>
-			<button
-				type="button"
-				onClick={onRemove}
-				aria-label="Remove server"
-				style={{
-					width: 24,
-					height: 24,
-					padding: 0,
-					background: 'transparent',
-					color: 'var(--text-muted)',
-					border: '1px solid var(--border)',
-					borderRadius: 'var(--radius-md)',
-					cursor: 'pointer',
-					fontSize: 14,
-					lineHeight: 1,
+					display: 'grid',
+					gridTemplateColumns: '120px 1fr auto auto auto',
+					gap: 'var(--space-2)',
+					alignItems: 'center',
 				}}
 			>
-				×
-			</button>
+				<input
+					type="text"
+					value={server.id}
+					onChange={(e) => onChange({ id: e.target.value })}
+					placeholder="id"
+					style={{ ...inputStyle, fontSize: 'var(--font-12)', padding: '6px var(--space-2)' }}
+				/>
+				<input
+					type="url"
+					value={server.url}
+					onChange={(e) => {
+						onChange({ url: e.target.value })
+						setProbe({ kind: 'idle' })
+					}}
+					placeholder="https://mcp.example.com/sse"
+					style={{ ...inputStyle, fontSize: 'var(--font-12)', padding: '6px var(--space-2)' }}
+				/>
+				<button
+					type="button"
+					onClick={runProbe}
+					disabled={probe.kind === 'probing' || !server.url.trim()}
+					title="Open a one-shot connection to this server, list its tools, close. Never calls any tool."
+					style={{
+						height: 28,
+						minWidth: 56,
+						padding: '0 var(--space-2)',
+						background: 'transparent',
+						color: probeColor,
+						border: `1px solid ${
+							probe.kind === 'ok'
+								? 'var(--status-succ)'
+								: probe.kind === 'error'
+									? 'var(--live)'
+									: 'var(--border)'
+						}`,
+						borderRadius: 'var(--radius-md)',
+						font: 'inherit',
+						fontFamily: 'var(--font-mono)',
+						fontSize: 11,
+						fontWeight: 500,
+						cursor:
+							probe.kind === 'probing' || !server.url.trim() ? 'not-allowed' : 'pointer',
+					}}
+				>
+					{probeLabel}
+				</button>
+				<select
+					value={server.trust}
+					onChange={(e) => onChange({ trust: e.target.value as 'trusted' | 'untrusted' })}
+					style={{
+						height: 28,
+						padding: '0 var(--space-2)',
+						background: 'var(--surface-elev)',
+						border: '1px solid var(--border)',
+						borderRadius: 'var(--radius-md)',
+						color: 'var(--text-strong)',
+						font: 'inherit',
+						fontFamily: 'var(--font-ui)',
+						fontSize: 'var(--font-12)',
+					}}
+					title="Trusted servers can have their tools called without per-call confirmation."
+				>
+					<option value="untrusted">untrusted</option>
+					<option value="trusted">trusted</option>
+				</select>
+				<button
+					type="button"
+					onClick={onRemove}
+					aria-label="Remove server"
+					style={{
+						width: 24,
+						height: 24,
+						padding: 0,
+						background: 'transparent',
+						color: 'var(--text-muted)',
+						border: '1px solid var(--border)',
+						borderRadius: 'var(--radius-md)',
+						cursor: 'pointer',
+						fontSize: 14,
+						lineHeight: 1,
+					}}
+				>
+					×
+				</button>
+			</div>
+			{probe.kind === 'error' && (
+				<span
+					style={{
+						fontSize: 11,
+						color: 'var(--live)',
+						fontFamily: 'var(--font-mono)',
+						paddingLeft: 'var(--space-1)',
+					}}
+				>
+					{probe.message}
+				</span>
+			)}
+			{probe.kind === 'ok' && (
+				<span
+					style={{
+						fontSize: 11,
+						color: 'var(--status-succ)',
+						paddingLeft: 'var(--space-1)',
+					}}
+				>
+					Connected · {probe.tool_count} {probe.tool_count === 1 ? 'tool' : 'tools'}{' '}
+					exposed
+				</span>
+			)}
 		</div>
 	)
 }

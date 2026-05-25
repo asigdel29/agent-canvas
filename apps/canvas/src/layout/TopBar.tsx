@@ -28,6 +28,7 @@ export interface TopBarProps {
 	readonly spend?: ReactNode | string | null
 	readonly onShareClick?: () => void
 	readonly onSettingsClick?: (() => void) | undefined
+	readonly onFeedbackClick?: (() => void) | undefined
 }
 
 export function TopBar({
@@ -37,6 +38,7 @@ export function TopBar({
 	spend = null,
 	onShareClick,
 	onSettingsClick,
+	onFeedbackClick,
 }: TopBarProps) {
 	return (
 		<div
@@ -82,6 +84,7 @@ export function TopBar({
 					typeof spend === 'string' ? <SpendPill text={spend} /> : spend
 				)}
 				{presenceAvatars.length > 0 && <PresenceStack avatars={presenceAvatars} />}
+				{onFeedbackClick && <FeedbackTextButton onClick={onFeedbackClick} />}
 				{onSettingsClick && <SettingsIconButton onClick={onSettingsClick} />}
 				<ShareButton onClick={onShareClick} />
 			</div>
@@ -182,6 +185,34 @@ function PresenceStack({ avatars }: { avatars: readonly { id: string; label: str
 				</span>
 			)}
 		</div>
+	)
+}
+
+function FeedbackTextButton({ onClick }: { onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			aria-label="Send feedback"
+			title="Send feedback (the recent event tail is attached automatically)"
+			style={{
+				height: 28,
+				padding: '0 var(--space-3)',
+				display: 'inline-flex',
+				alignItems: 'center',
+				background: 'transparent',
+				border: '1px solid var(--border)',
+				borderRadius: 'var(--radius-md)',
+				color: 'var(--text-strong)',
+				font: 'inherit',
+				fontFamily: 'var(--font-ui)',
+				fontSize: 'var(--font-12)',
+				fontWeight: 500,
+				cursor: 'pointer',
+			}}
+		>
+			Feedback
+		</button>
 	)
 }
 
