@@ -57,6 +57,8 @@ export interface CreateEndpointResult {
 export interface WebhookEndpointStore {
 	create(input: CreateEndpointInput): Promise<CreateEndpointResult>
 	listForWorkspace(workspace_id: WorkspaceId): Promise<readonly WebhookEndpointRecord[]>
+	/** Fetch the live (non-revoked) endpoint record by id, or null. */
+	getById(id: string): Promise<WebhookEndpointRecord | null>
 	getSigningSecret(id: string): Promise<string | null>
 	/**
 	 * Soft-revoke. Returns the post-revoke record on success, null
@@ -125,6 +127,12 @@ export class InMemoryWebhookEndpointStore implements WebhookEndpointStore {
 		}
 		out.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
 		return out
+	}
+
+	async getById(id: string): Promise<WebhookEndpointRecord | null> {
+		const r = this.rows.get(id)
+		if (!r || r.rec.revoked_at !== null) return null
+		return r.rec
 	}
 
 	async getSigningSecret(id: string): Promise<string | null> {
@@ -222,6 +230,15 @@ export class PostgresWebhookEndpointStore implements WebhookEndpointStore {
 			ORDER BY created_at DESC
 		`
 		return rows.map(rowToRecord)
+	}
+
+	async getById(id: string): Promise<WebhookEndpointRecord | null> {
+		const rows = await this.sql<EndpointRow[]>`
+			SELECT * FROM webhook_endpoints
+			WHERE id = ${id} AND revoked_at IS NULL
+			LIMIT 1
+		`
+		return rows[0] ? rowToRecord(rows[0]) : null
 	}
 
 	async getSigningSecret(id: string): Promise<string | null> {

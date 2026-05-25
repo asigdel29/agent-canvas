@@ -45,6 +45,11 @@ import {
 	PostgresWebhookEndpointStore,
 } from './webhooks/webhookEndpointStore.js'
 import {
+	type WebhookDeliveryStore,
+	InMemoryWebhookDeliveryStore,
+	PostgresWebhookDeliveryStore,
+} from './webhooks/webhookDeliveryStore.js'
+import {
 	type WorkspaceAuditStore,
 	InMemoryWorkspaceAuditStore,
 	PostgresWorkspaceAuditStore,
@@ -137,6 +142,7 @@ export interface Runtime {
 	readonly apiTokenStore: ApiTokenStore
 	readonly rateLimitStore: RateLimitStore
 	readonly webhookEndpointStore: WebhookEndpointStore
+	readonly webhookDeliveryStore: WebhookDeliveryStore
 	readonly workspaceAuditStore: WorkspaceAuditStore
 	readonly billingStore: BillingStore
 }
@@ -323,6 +329,9 @@ function build(): Runtime {
 		webhookEndpointStore: sql
 			? new PostgresWebhookEndpointStore(sql)
 			: new InMemoryWebhookEndpointStore(),
+		webhookDeliveryStore: sql
+			? new PostgresWebhookDeliveryStore(sql)
+			: new InMemoryWebhookDeliveryStore(),
 		workspaceAuditStore: sql
 			? new PostgresWorkspaceAuditStore(sql)
 			: new InMemoryWorkspaceAuditStore(),
