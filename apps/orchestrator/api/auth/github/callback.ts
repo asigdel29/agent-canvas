@@ -27,8 +27,6 @@
 import { signSession, verifySession } from '../../../dist/auth/jwt.js'
 import { preflightResponse } from '../../../dist/http/cors.js'
 
-export const config = { runtime: 'nodejs' }
-
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'
 const GITHUB_USER_URL = 'https://api.github.com/user'
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days

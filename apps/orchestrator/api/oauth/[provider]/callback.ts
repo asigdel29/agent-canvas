@@ -10,10 +10,6 @@
 import { getRuntime } from '../../../dist/index.js'
 import type { ProviderId } from '@agent-canvas/orchestrator-types'
 
-export const config = {
-	runtime: 'nodejs',
-}
-
 export default async function handler(req: Request): Promise<Response> {
 	if (req.method !== 'GET') return jsonError(405, 'method_not_allowed')
 	const url = new URL(req.url)

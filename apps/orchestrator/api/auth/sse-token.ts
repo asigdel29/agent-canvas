@@ -15,10 +15,6 @@ import { extractSession } from '../../dist/auth/session.js'
 import { mintSseToken } from '../../dist/auth/sseToken.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 
-export const config = {
-	runtime: 'nodejs',
-}
-
 const TTL_SECONDS = 60
 
 export default async function handler(req: Request): Promise<Response> {

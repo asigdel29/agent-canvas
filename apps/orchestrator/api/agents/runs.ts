@@ -37,8 +37,6 @@ import {
 } from '../../dist/agents/runLoop.js'
 import { composeToolCatalog } from '../../dist/agents/toolRegistry.js'
 
-export const config = { runtime: 'nodejs' }
-
 export default async function handler(req: Request): Promise<Response> {
 	const preflight = preflightResponse(req)
 	if (preflight) return preflight
