@@ -22,66 +22,64 @@
 
 :root {
 	/*
-	 * Surface stack — three depths.
+	 * Surface stack — three depths on a near-black base. The canvas
+	 * paper is the deepest plane; chrome lifts one step on each
+	 * depth ladder so hierarchy reads via lightness, not borders.
 	 *
-	 *   surface       page background, the canvas paper
+	 *   surface       page background, the canvas paper (#0A0A0A)
 	 *   surface-elev  raised chrome (rails, toolbars, popovers)
 	 *   surface-sunk  inset wells (search field, code blocks)
+	 *   surface-overlay   hover wash for transient highlight
 	 */
-	--surface: #FFFFFF;
-	--surface-elev: #FFFFFF;
-	--surface-sunk: #F5F5F5;
-	--surface-overlay: rgba(0, 0, 0, 0.04);
+	--surface: #0A0A0A;
+	--surface-elev: #141414;
+	--surface-sunk: #1C1C1C;
+	--surface-overlay: rgba(255, 255, 255, 0.04);
 
 	/*
-	 * Text — pure black on white with a single muted step. We avoid
-	 * a third "extra muted" step because Framer's hierarchy is built
-	 * on weight contrast (500 vs 400), not opacity steps.
+	 * Text — near-white on near-black with a single muted step.
+	 * Framer's hierarchy is built on weight contrast (500 vs 400),
+	 * not opacity steps; we keep the same rule.
 	 */
-	--text-strong: #0A0A0A;
-	--text-muted: #737373;
+	--text-strong: #FAFAFA;
+	--text-muted: #8C8C8C;
 	--text-on-accent: #FFFFFF;
 
 	/*
-	 * Borders — hairline only. Two variants:
+	 * Borders — hairline only, in white at low alpha.
 	 *
 	 *   border          ambient separators (rail boundaries)
 	 *   border-strong   focused / hovered cells (selection ring)
 	 */
-	--border: rgba(0, 0, 0, 0.08);
-	--border-strong: rgba(0, 0, 0, 0.16);
+	--border: rgba(255, 255, 255, 0.08);
+	--border-strong: rgba(255, 255, 255, 0.16);
 
 	/*
-	 * Accents.
+	 * Accents — same Framer hues as light mode, brightened a half
+	 * step so they read crisply against a near-black surface
+	 * without losing the brand.
 	 *
-	 *   accent     Framer blue. Primary CTA, link, selection ring,
-	 *              active tab indicator. The "user pressed this"
-	 *              colour.
-	 *   accent-soft  10% wash of the accent for selected row tints.
-	 *   live       Framer pink. Reserved for the LIVE state — a run
-	 *              that is executing right now. Never used for
-	 *              passive UI. Pulse animation lives below.
-	 *   live-soft  Same wash treatment for the live-row tint.
+	 *   accent       Framer blue. Primary CTA, link, selection ring.
+	 *   accent-soft  ~12% wash for selected row tints.
+	 *   live         Framer pink. The LIVE state only. Pulses.
+	 *   live-soft    ~12% wash for the irreversible-card tint.
 	 */
-	--accent: #0055FF;
-	--accent-hover: #0044CC;
-	--accent-soft: rgba(0, 85, 255, 0.08);
-	--live: #FF005C;
-	--live-soft: rgba(255, 0, 92, 0.08);
+	--accent: #3D7BFF;
+	--accent-hover: #5C92FF;
+	--accent-soft: rgba(61, 123, 255, 0.12);
+	--live: #FF1F73;
+	--live-soft: rgba(255, 31, 115, 0.12);
 
 	/*
-	 * Run-status colour map.
-	 *
-	 * status-await uses warm amber so it reads as "waiting on a
-	 * human", distinct from in-progress (which uses --live). Reach
-	 * for --live ONLY on the running state; everything else stays
-	 * muted so the canvas keeps a calm baseline.
+	 * Run-status palette tuned for the dark surface. Greens shift
+	 * brighter, ambers warmer, reds softer so none of them overpower
+	 * the live pink.
 	 */
 	--status-running: var(--live);
-	--status-succ: #007A33;
-	--status-await: #B45309;
-	--status-fail: #B91C1C;
-	--status-unreach: #737373;
+	--status-succ: #34D399;
+	--status-await: #F59E0B;
+	--status-fail: #F87171;
+	--status-unreach: #8C8C8C;
 
 	/*
 	 * Radii — tight. Framer chrome rarely exceeds 8px on a control
@@ -115,11 +113,12 @@
 	--zoom-h: 32px;
 
 	/*
-	 * Elevation — Framer keeps shadow to a minimum. One soft drop
-	 * for floating chrome, nothing else.
+	 * Elevation — deeper drops than light mode because the surface
+	 * itself is dark; without stronger blacks behind the chrome
+	 * floats lose all separation.
 	 */
-	--shadow-floating: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-	--shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.04);
+	--shadow-floating: 0 4px 16px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
+	--shadow-popover: 0 12px 40px rgba(0, 0, 0, 0.50), 0 2px 6px rgba(0, 0, 0, 0.30);
 
 	/*
 	 * Motion. Reduced-motion override at the end of the file zeroes
@@ -178,6 +177,23 @@ body {
 	overflow: hidden;
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
+	/* Tells the browser to render native form controls + scrollbars in dark. */
+	color-scheme: dark;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--border-strong);
+	border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-muted);
 }
 
 #root {
