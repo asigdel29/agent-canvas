@@ -12,7 +12,7 @@ import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import type { ApiTokenScope } from '../../dist/tokens/apiTokenStore.js'
 import { withRateLimit } from '../../dist/rateLimit/withRateLimit.js'
-import { dispatchWebhook } from '../../dist/webhooks/dispatchWebhook.js'
+import { auditAndDispatch } from '../../dist/audit/auditAndDispatch.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import type { WorkspaceId } from '../../dist/tenancy/tenancyTypes.js'
 
@@ -111,15 +111,15 @@ export default async function handler(req: Request): Promise<Response> {
 			scope,
 			...(body.expires_at !== undefined ? { expires_at: body.expires_at } : {}),
 		})
-		// Append to the workspace audit trail. Best-effort: an audit
-		// write failure must not block the user's mint. Errors are
-		// swallowed; logging happens at the store level.
-		// We need the audit row id for the webhook event_id; await
-		// the append and use the returned record. If the audit write
-		// throws, fall back to a synthetic id so dispatch still fires.
-		let auditEventId: string
-		try {
-			const auditRow = await audit.append({
+		// Audit + dispatch in one call. Fire-and-forget so the
+		// response is not blocked on queue writes.
+		void auditAndDispatch(
+			{
+				audit,
+				endpointStore: webhookEndpointStore,
+				deliveryStore: webhookDeliveryStore,
+			},
+			{
 				workspace_id,
 				actor_user_id: user_id,
 				action: 'token.minted',
@@ -130,29 +130,14 @@ export default async function handler(req: Request): Promise<Response> {
 					scope: issued.record.scope,
 					token_prefix: issued.record.token_prefix,
 				},
-			})
-			auditEventId = auditRow.id
-		} catch {
-			auditEventId = `evt_local_${Date.now()}`
-		}
-		// Fire-and-forget webhook dispatch. Enqueue rows for every
-		// subscriber to 'token.minted' or '*'; the drain worker
-		// delivers them later. We deliberately do NOT await here —
-		// the response should not wait on the queue write.
-		void dispatchWebhook(
-			{ endpointStore: webhookEndpointStore, deliveryStore: webhookDeliveryStore },
-			{
-				workspace_id,
-				event_type: 'token.minted',
-				event_id: auditEventId,
-				payload: {
+				webhookPayload: {
 					token_id: issued.record.id,
 					token_prefix: issued.record.token_prefix,
 					scope: issued.record.scope,
 					name: issued.record.name,
 				},
 			}
-		).catch(() => undefined)
+		)
 		// Return the raw token EXACTLY ONCE. Future GETs only show
 		// the hash-derived prefix.
 		return withCorsHeaders(
