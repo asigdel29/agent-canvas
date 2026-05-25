@@ -1,0 +1,25 @@
+{
+  "name": "@agent-canvas/sdk",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeScript client for the agent-canvas orchestrator REST API. Wraps API-token auth, exposes agent / run / token / webhook / audit / billing surfaces, and re-exports the canonical webhook signature verifier.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
