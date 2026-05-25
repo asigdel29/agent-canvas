@@ -59,6 +59,8 @@ import agentProbeMcpHandler from '../api/agents/probe-mcp.js'
 import feedbackHandler from '../api/feedback.js'
 import tokensIndexHandler from '../api/tokens/index.js'
 import tokenByIdHandler from '../api/tokens/[id].js'
+import webhooksIndexHandler from '../api/webhooks/index.js'
+import webhookByIdHandler from '../api/webhooks/[id].js'
 import approvalsIndexHandler from '../api/approvals/index.js'
 import approvalByIdHandler from '../api/approvals/[id].js'
 import syncHandler from '../api/sync/[room].js'
@@ -141,6 +143,19 @@ function matchRoute(method: string, pathname: string): Handler | null {
 		return approvalByIdHandler
 	}
 	if (pathname.startsWith('/api/sync/') && (method === 'GET' || opts)) return syncHandler
+	// Outbound webhook management — list / register / revoke.
+	// Matched BEFORE the inbound /api/webhooks/:provider route so a
+	// GET or DELETE on /api/webhooks(...) reaches the outbound
+	// handlers; POSTs with a provider segment still flow to inbound.
+	if (pathname === '/api/webhooks' && (method === 'GET' || method === 'POST' || opts)) {
+		return webhooksIndexHandler
+	}
+	if (
+		pathname.match(/^\/api\/webhooks\/whe_[^/]+$/) &&
+		(method === 'DELETE' || opts)
+	) {
+		return webhookByIdHandler
+	}
 	if (pathname.startsWith('/api/webhooks/') && (method === 'POST' || opts)) return webhookHandler
 	if (pathname.match(/^\/api\/oauth\/[^/]+\/start$/) && (method === 'GET' || opts)) {
 		return oauthStartHandler
