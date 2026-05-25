@@ -39,8 +39,6 @@
 import { signSession } from '../../../dist/auth/jwt.js'
 import { preflightResponse, withCorsHeaders } from '../../../dist/http/cors.js'
 
-export const config = { runtime: 'nodejs' }
-
 const STATE_TTL_SECONDS = 5 * 60
 const GITHUB_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize'
 const GITHUB_SCOPES = 'read:user user:email'
