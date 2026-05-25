@@ -41,6 +41,8 @@ import { FeedbackModal } from './feedback/FeedbackModal.js'
 import { track } from './analytics/posthog.js'
 import { LegalPage } from './legal/LegalPage.js'
 import { TERMS_OF_SERVICE, PRIVACY_POLICY } from './legal/legalContent.js'
+import { WorkspaceSwitcher } from './workspaces/WorkspaceSwitcher.js'
+import { MembersPage } from './workspaces/MembersPage.js'
 import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
@@ -235,14 +237,24 @@ export function App() {
 		])
 	}
 
+	// Effective workspace id. Defaults to the realtime room id (the
+	// auth callback puts the user's solo workspace there); the
+	// WorkspaceSwitcher writes the chosen workspace into sessionStorage
+	// so a reload remembers it.
+	const [workspaceOverride, setWorkspaceOverride] = useState<string | null>(() => {
+		if (typeof window === 'undefined') return null
+		return window.sessionStorage.getItem('ac.workspace_id')
+	})
+	const effectiveWorkspaceId = workspaceOverride ?? realtime?.room ?? ''
+
 	const agentApi = useMemo(() => {
-		if (!realtime) return null
+		if (!realtime || !effectiveWorkspaceId) return null
 		return new AgentApi({
 			baseUrl: ORCHESTRATOR_URL,
 			session: realtime.session,
-			workspaceId: realtime.room, // current proxy for workspace id; real ws ids land with users table
+			workspaceId: effectiveWorkspaceId,
 		})
-	}, [realtime])
+	}, [realtime, effectiveWorkspaceId])
 
 	// Initial load — fetch agents for this workspace once the session
 	// is in place. Errors land as structured toast cards.
@@ -568,6 +580,20 @@ export function App() {
 	if (pathname === '/privacy') {
 		return <LegalPage title="Privacy Policy" markdown={PRIVACY_POLICY} />
 	}
+	if (pathname === '/workspace/members' && realtime) {
+		return (
+			<MembersPage
+				orchestratorUrl={ORCHESTRATOR_URL}
+				session={realtime.session}
+				workspaceId={effectiveWorkspaceId}
+				currentUserId={realtime.handle ?? ''}
+				onBack={() => {
+					window.history.pushState({}, '', '/')
+					window.location.reload()
+				}}
+			/>
+		)
+	}
 
 	// Routing.
 	if (!realtime) {
@@ -609,7 +635,21 @@ export function App() {
 			<Shell
 				topBar={
 					<TopBar
-						workspaceName={realtime.handle ? `${realtime.handle}'s workspace` : 'Untitled workspace'}
+						workspaceName={
+							<WorkspaceSwitcher
+								orchestratorUrl={ORCHESTRATOR_URL}
+								session={realtime.session}
+								currentWorkspaceId={effectiveWorkspaceId}
+								onSwitch={(id) => {
+									window.sessionStorage.setItem('ac.workspace_id', id)
+									setWorkspaceOverride(id)
+								}}
+								onOpenMembers={() => {
+									window.history.pushState({}, '', '/workspace/members')
+									window.location.reload()
+								}}
+							/>
+						}
 						breadcrumbs={['canvas']}
 						presenceAvatars={[
 							{

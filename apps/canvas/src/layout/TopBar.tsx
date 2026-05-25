@@ -16,7 +16,12 @@
 import type { ReactNode } from 'react'
 
 export interface TopBarProps {
-	readonly workspaceName: string
+	/**
+	 * The workspace label slot. A string renders as the default
+	 * label text; a ReactNode renders verbatim so the caller can
+	 * mount a WorkspaceSwitcher there.
+	 */
+	readonly workspaceName: ReactNode
 	readonly breadcrumbs?: readonly string[]
 	readonly presenceAvatars?: readonly { id: string; label: string; color: string }[]
 	/**
@@ -62,7 +67,11 @@ export function TopBar({
 				}}
 			>
 				<WorkspaceMark />
-				<span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{workspaceName}</span>
+				{typeof workspaceName === 'string' ? (
+					<span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{workspaceName}</span>
+				) : (
+					workspaceName
+				)}
 				{breadcrumbs.map((crumb, i) => (
 					<span key={`${i}:${crumb}`} style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
 						<span aria-hidden="true" style={{ color: 'var(--text-muted)' }}>
