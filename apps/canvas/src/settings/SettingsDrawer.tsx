@@ -35,6 +35,7 @@
  */
 
 import { useState } from 'react'
+import { TokensSection } from './TokensSection.js'
 
 export const SETTINGS_STORAGE = {
 	anthropicKey: 'agent-canvas:anthropic_api_key',
@@ -86,9 +87,18 @@ export interface SettingsDrawerProps {
 	 * dismiss the "anthropic_not_configured" error toast).
 	 */
 	readonly onSave?: (values: SettingsValues) => void
+	/**
+	 * Optional orchestrator origin + session JWT. When both are
+	 * supplied, the drawer mounts platform sections that talk to the
+	 * REST API (TokensSection today; webhooks + billing in P15+P16).
+	 * Omitted by callers that only want the local BYOK fields
+	 * (e.g. the onboarding wizard's embedded usage).
+	 */
+	readonly orchestratorUrl?: string
+	readonly session?: string
 }
 
-export function SettingsDrawer({ onClose, onSave }: SettingsDrawerProps) {
+export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: SettingsDrawerProps) {
 	const [values, setValues] = useState<SettingsValues>(() => readSettings())
 	const [savedAt, setSavedAt] = useState<number | null>(null)
 
@@ -205,6 +215,16 @@ export function SettingsDrawer({ onClose, onSave }: SettingsDrawerProps) {
 					Save
 				</button>
 			</div>
+
+			{orchestratorUrl && session && (
+				<>
+					<div
+						aria-hidden
+						style={{ height: 1, background: 'var(--border)', margin: 'var(--space-2) 0' }}
+					/>
+					<TokensSection orchestratorUrl={orchestratorUrl} session={session} />
+				</>
+			)}
 		</div>
 	)
 }
