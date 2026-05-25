@@ -97,7 +97,9 @@ export function LegalPage({ title, markdown }: LegalPageProps) {
  * -------------------------------------------------------------- */
 
 type Block =
-	| { kind: 'h1' | 'h2' | 'h3'; text: string }
+	| { kind: 'h1'; text: string }
+	| { kind: 'h2'; text: string }
+	| { kind: 'h3'; text: string }
 	| { kind: 'p'; lines: string[] }
 	| { kind: 'ul'; items: string[] }
 
