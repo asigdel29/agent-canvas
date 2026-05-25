@@ -52,6 +52,8 @@ import commandsHandler from '../api/commands.js'
 import sseTokenHandler from '../api/auth/sse-token.js'
 import authLoginGithubHandler from '../api/auth/login/github.js'
 import authGithubCallbackHandler from '../api/auth/github/callback.js'
+import agentsIndexHandler from '../api/agents/index.js'
+import agentByIdHandler from '../api/agents/[id].js'
 import syncHandler from '../api/sync/[room].js'
 import webhookHandler from '../api/webhooks/[provider].js'
 import oauthStartHandler from '../api/oauth/[provider]/start.js'
@@ -95,6 +97,15 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	}
 	if (pathname === '/api/auth/login/github' && method === 'GET') return authLoginGithubHandler
 	if (pathname === '/api/auth/github/callback' && method === 'GET') return authGithubCallbackHandler
+	if (pathname === '/api/agents' && (method === 'GET' || method === 'POST' || opts)) {
+		return agentsIndexHandler
+	}
+	if (
+		pathname.match(/^\/api\/agents\/[^/]+$/) &&
+		(method === 'GET' || method === 'PATCH' || method === 'DELETE' || opts)
+	) {
+		return agentByIdHandler
+	}
 	if (pathname.startsWith('/api/sync/') && (method === 'GET' || opts)) return syncHandler
 	if (pathname.startsWith('/api/webhooks/') && (method === 'POST' || opts)) return webhookHandler
 	if (pathname.match(/^\/api\/oauth\/[^/]+\/start$/) && (method === 'GET' || opts)) {
