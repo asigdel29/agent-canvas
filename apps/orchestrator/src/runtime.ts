@@ -22,6 +22,12 @@ import {
 	InMemoryAgentStore,
 	PostgresAgentStore,
 } from './agents/agentStore.js'
+import {
+	type ApprovalStore,
+	InMemoryApprovalStore,
+	PostgresApprovalStore,
+} from './agents/approvalStore.js'
+import { StoreBackedApprovalGate } from './agents/storeBackedApprovalGate.js'
 import { IngestionPipeline } from './orchestration/ingestionPipeline.js'
 import { RunCoordinator } from './orchestration/runCoordinator.js'
 import { TriggerRouter } from './orchestration/triggerRouter.js'
@@ -93,6 +99,8 @@ export interface Runtime {
 	readonly auditLog: AuditLog
 	readonly sseNonces: NonceStore
 	readonly agentStore: AgentStore
+	readonly approvalStore: ApprovalStore
+	readonly approvalGate: StoreBackedApprovalGate
 }
 
 let cached: Runtime | null = null
@@ -221,6 +229,19 @@ function build(): Runtime {
 		? new PostgresAgentStore(sql)
 		: new InMemoryAgentStore()
 
+	const approvalStore: ApprovalStore = sql
+		? new PostgresApprovalStore(sql)
+		: new InMemoryApprovalStore()
+
+	const approvalGate = new StoreBackedApprovalGate({
+		store: approvalStore,
+		onRequest: (req) => {
+			// Already emitted as approval_required by the run loop; this
+			// hook is here so future SSE-broadcast layers can react.
+			void req
+		},
+	})
+
 	return {
 		registry,
 		endpoint,
@@ -235,5 +256,7 @@ function build(): Runtime {
 		auditLog,
 		sseNonces,
 		agentStore,
+		approvalStore,
+		approvalGate,
 	}
 }

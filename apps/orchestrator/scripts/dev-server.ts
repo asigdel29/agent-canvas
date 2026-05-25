@@ -54,6 +54,9 @@ import authLoginGithubHandler from '../api/auth/login/github.js'
 import authGithubCallbackHandler from '../api/auth/github/callback.js'
 import agentsIndexHandler from '../api/agents/index.js'
 import agentByIdHandler from '../api/agents/[id].js'
+import agentRunsHandler from '../api/agents/runs.js'
+import approvalsIndexHandler from '../api/approvals/index.js'
+import approvalByIdHandler from '../api/approvals/[id].js'
 import syncHandler from '../api/sync/[room].js'
 import webhookHandler from '../api/webhooks/[provider].js'
 import oauthStartHandler from '../api/oauth/[provider]/start.js'
@@ -100,11 +103,23 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	if (pathname === '/api/agents' && (method === 'GET' || method === 'POST' || opts)) {
 		return agentsIndexHandler
 	}
+	if (pathname === '/api/agents/runs' && (method === 'POST' || opts)) {
+		return agentRunsHandler
+	}
 	if (
 		pathname.match(/^\/api\/agents\/[^/]+$/) &&
 		(method === 'GET' || method === 'PATCH' || method === 'DELETE' || opts)
 	) {
 		return agentByIdHandler
+	}
+	if (pathname === '/api/approvals' && (method === 'GET' || opts)) {
+		return approvalsIndexHandler
+	}
+	if (
+		pathname.match(/^\/api\/approvals\/[^/]+$/) &&
+		(method === 'POST' || opts)
+	) {
+		return approvalByIdHandler
 	}
 	if (pathname.startsWith('/api/sync/') && (method === 'GET' || opts)) return syncHandler
 	if (pathname.startsWith('/api/webhooks/') && (method === 'POST' || opts)) return webhookHandler
