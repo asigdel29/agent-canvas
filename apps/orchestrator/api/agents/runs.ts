@@ -100,6 +100,30 @@ export default async function handler(req: Request): Promise<Response> {
 	const agent = await agentStore.get(body.agent_id as AgentId)
 	if (!agent) return withCorsHeaders(req, jsonError(404, 'agent_not_found'))
 
+	// Membership gate. Running an agent is a write-class action, so
+	// member+ is required. Viewers see the canvas but cannot start runs.
+	const runtimeTenancy = (runtime as unknown as {
+		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
+	}).tenancyStore
+	if (!runtimeTenancy) {
+		return withCorsHeaders(req, jsonError(500, 'tenancy_store_not_initialized'))
+	}
+	try {
+		const { TenancyForbiddenError } = await import('../../dist/tenancy/tenancyTypes.js')
+		await runtimeTenancy.requireMembership(
+			session.sub as never,
+			agent.workspace_id,
+			'member'
+		)
+		void TenancyForbiddenError // imported above for clarity
+	} catch (err) {
+		const name = err instanceof Error ? err.name : ''
+		if (name === 'TenancyForbiddenError') {
+			return withCorsHeaders(req, jsonError(403, 'workspace_forbidden'))
+		}
+		throw err
+	}
+
 	const run_id = newRunId()
 	const room_id = body.room_id as RoomId
 

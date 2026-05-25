@@ -26,6 +26,8 @@
 
 import { signSession, verifySession } from '../../../dist/auth/jwt.js'
 import { preflightResponse } from '../../../dist/http/cors.js'
+import { getRuntime } from '../../../dist/index.js'
+import type { UserId } from '@agent-canvas/orchestrator-types'
 
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'
 const GITHUB_USER_URL = 'https://api.github.com/user'
@@ -89,25 +91,46 @@ export default async function handler(req: Request): Promise<Response> {
 		return jsonError(502, 'github_user_fetch_failed', msg)
 	}
 
+	// Upsert the user + ensure they have a solo workspace. This is
+	// the first time the tenancy tables see this person; once landed
+	// here every subsequent login is a no-op idempotent refresh.
+	const runtime = getRuntime() as unknown as {
+		tenancyStore?: import('../../../dist/tenancy/tenancyStore.js').TenancyStore
+	}
+	const tenancy = runtime.tenancyStore
+	if (!tenancy) return jsonError(500, 'tenancy_store_not_initialized')
+
+	const tenantUser = await tenancy.upsertGithubUser({
+		github_id: String(user.id),
+		github_login: user.login,
+		email: user.email ?? null,
+		name: user.name ?? null,
+	})
+	const workspace = await tenancy.ensureSoloWorkspace(
+		tenantUser.id,
+		`${user.login}'s workspace`
+	)
+
 	const now = Math.floor(Date.now() / 1000)
 	const session = signSession(
 		{
-			sub: `gh:${user.id}` as never,
+			sub: tenantUser.id as UserId,
+			workspace_id: workspace.id,
 			exp: now + SESSION_TTL_SECONDS,
 			iat: now,
-		},
+		} as never,
 		sessionSecret
 	)
 
-	// Redirect with the session in the URL. The canvas immediately
-	// stashes it to sessionStorage and strips it with replaceState.
+	// Redirect with the session + workspace + handle in the URL. The
+	// canvas immediately stashes everything to sessionStorage and
+	// strips the params with replaceState.
 	const dest = new URL(redirectTo)
 	dest.searchParams.set('session', session)
-	// Default the canvas to a per-user room so first-login UX has a
-	// known room id without an extra page.
 	if (!dest.searchParams.has('room')) {
-		dest.searchParams.set('room', `room_${user.login}`)
+		dest.searchParams.set('room', workspace.id)
 	}
+	dest.searchParams.set('workspace_id', workspace.id)
 	dest.searchParams.set('login_provider', 'github')
 	dest.searchParams.set('login_handle', user.login)
 
