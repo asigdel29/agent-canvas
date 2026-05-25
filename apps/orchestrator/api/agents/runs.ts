@@ -27,6 +27,8 @@ import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import type { AgentId } from '../../dist/agents/agentRecord.js'
 import { tryCreateAnthropicClient } from '../../dist/agents/anthropicClient.js'
 import { buildBrowserContribution } from '../../dist/agents/providers/browserProvider.js'
+import { buildComputerUseContribution } from '../../dist/agents/providers/computerUseProvider.js'
+import { tryCreateE2BLauncher } from '../../dist/agents/providers/computerUseSandbox.js'
 import { buildMcpContribution } from '../../dist/agents/providers/mcpProvider.js'
 import {
 	BusRunEventSink,
@@ -113,7 +115,58 @@ export default async function handler(req: Request): Promise<Response> {
 		config: agent.capabilities.browser_use,
 		agent_id: agent.id,
 	})
-	const catalog = composeToolCatalog([mcpContribution, browserContribution])
+
+	// Computer-use is gated on the agent flag AND a configured
+	// sandbox launcher. When the launcher is missing (no
+	// E2B_API_KEY), we publish a clear event and skip the
+	// contribution; the agent can still use MCP and browser-use.
+	let screenshotSeq = 0
+	const e2bLauncher =
+		agent.capabilities.computer_use.enabled &&
+		agent.capabilities.computer_use.provider === 'e2b'
+			? tryCreateE2BLauncher()
+			: null
+	if (agent.capabilities.computer_use.enabled && !e2bLauncher) {
+		bus.publish(room_id, {
+			seq: 0,
+			run_id,
+			kind: 'computer_use_unavailable' as never,
+			ts: new Date().toISOString(),
+			schema_version: 1,
+			payload: {
+				reason:
+					'E2B_API_KEY is not set; the computer tool is not exposed to the model.',
+			},
+		})
+	}
+	const computerUseContribution = await buildComputerUseContribution({
+		config: agent.capabilities.computer_use,
+		sandboxFactory: e2bLauncher
+			? () => e2bLauncher.create()
+			: async () => {
+					throw new Error('no computer-use sandbox launcher configured')
+				},
+		onScreenshot: (dataUri) => {
+			screenshotSeq += 1
+			bus.publish(room_id, {
+				seq: screenshotSeq,
+				run_id,
+				kind: 'computer_screenshot' as never,
+				ts: new Date().toISOString(),
+				schema_version: 1,
+				payload: {
+					agent_id: agent.id,
+					data_uri: dataUri,
+				},
+			})
+		},
+	})
+
+	const catalog = composeToolCatalog([
+		mcpContribution,
+		browserContribution,
+		computerUseContribution,
+	])
 
 	const sink = new BusRunEventSink(bus, room_id)
 

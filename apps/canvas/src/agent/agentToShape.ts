@@ -59,5 +59,6 @@ export function recordToShapeProps(
 		cap_browser_use: caps.browser_use.enabled,
 		cap_mcp_server_ids: caps.mcp_servers.map((s) => s.id),
 		cap_summary: summarizeCapabilities(caps),
+		last_screenshot_data_uri: '',
 	}
 }
