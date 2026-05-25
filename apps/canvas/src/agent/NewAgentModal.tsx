@@ -60,9 +60,21 @@ export interface NewAgentModalProps {
 	readonly open: boolean
 	readonly onCreate: (draft: NewAgentDraft) => void
 	readonly onClose: () => void
+	/**
+	 * Optional starter draft. When supplied (e.g. from picking a
+	 * starter in the EmptyState), the modal opens pre-filled.
+	 * Switching away by closing+reopening with no initialDraft
+	 * resets to blank.
+	 */
+	readonly initialDraft?: NewAgentDraft | null | undefined
 }
 
-export function NewAgentModal({ open, onCreate, onClose }: NewAgentModalProps) {
+export function NewAgentModal({
+	open,
+	onCreate,
+	onClose,
+	initialDraft,
+}: NewAgentModalProps) {
 	const [name, setName] = useState('')
 	const [purpose, setPurpose] = useState('')
 	const [model, setModel] = useState<ModelId>('claude-sonnet-4-6')
@@ -71,16 +83,25 @@ export function NewAgentModal({ open, onCreate, onClose }: NewAgentModalProps) {
 
 	const dialogRef = useRef<HTMLDivElement | null>(null)
 
-	// Reset when the modal closes so re-opening gives a fresh draft.
+	// Reset/prefill when the modal opens. A fresh open with no
+	// initialDraft gives a blank form; opening with a starter draft
+	// pre-fills everything. Closing always wipes so the next open
+	// starts from a known state.
 	useEffect(() => {
-		if (!open) {
+		if (open) {
+			setName(initialDraft?.name ?? '')
+			setPurpose(initialDraft?.purpose ?? '')
+			setModel((initialDraft?.model as ModelId) ?? 'claude-sonnet-4-6')
+			setSystemPrompt(initialDraft?.system_prompt ?? '')
+			setCapabilities(initialDraft?.capabilities ?? defaultCapabilities())
+		} else {
 			setName('')
 			setPurpose('')
 			setModel('claude-sonnet-4-6')
 			setSystemPrompt('')
 			setCapabilities(defaultCapabilities())
 		}
-	}, [open])
+	}, [open, initialDraft])
 
 	// Close on Escape; submit on Cmd/Ctrl+Enter.
 	useEffect(() => {

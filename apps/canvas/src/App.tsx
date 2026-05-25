@@ -37,6 +37,7 @@ import {
 import { agentShapeId, recordToShapeProps } from './agent/agentToShape.js'
 import { ErrorToast, type ErrorCard } from './errors/ErrorToast.js'
 import { SettingsDrawer } from './settings/SettingsDrawer.js'
+import { track } from './analytics/posthog.js'
 import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
@@ -157,6 +158,7 @@ export function App() {
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 	const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
 	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
+	const [agentModalInitial, setAgentModalInitial] = useState<NewAgentDraft | null>(null)
 	const [agents, setAgents] = useState<readonly AgentApiRecord[]>([])
 	const [errorCards, setErrorCards] = useState<readonly ErrorCard[]>([])
 	const [liveApprovals, setLiveApprovals] = useState<readonly PendingApprovalDto[]>([])
@@ -173,6 +175,14 @@ export function App() {
 	const realtime = useMemo(() => intakeAndStashCredentials(), [])
 	const [onboarded, setOnboarded] = useState<boolean>(readOnboardedFlag)
 	const cancelled = useMemo(() => readCancelledFlag(), [])
+
+	// First mount with a real session counts as a completed login.
+	// Fires once per fresh tab; intakeAndStashCredentials strips the
+	// URL params, so a refresh re-uses sessionStorage and doesn't
+	// re-fire.
+	useEffect(() => {
+		if (realtime) track('login_completed', { has_handle: Boolean(realtime.handle) })
+	}, [realtime])
 
 	// SSE realtime — only when we have a session.
 	useEffect(() => {
@@ -302,6 +312,24 @@ export function App() {
 		}
 	}, [liveEvents])
 
+	// Track run terminal states from SSE so the funnel sees
+	// run_succeeded vs run_failed without polling.
+	useEffect(() => {
+		const last = liveEvents[liveEvents.length - 1]
+		if (!last) return
+		if (last.kind === 'run_succeeded') {
+			track('run_succeeded', {
+				run_id: last.run_id,
+				iterations: Number((last.payload as { iterations?: number }).iterations ?? 0),
+			})
+		} else if (last.kind === 'run_failed' || last.kind === 'run_cancelled') {
+			track('run_failed', {
+				run_id: last.run_id,
+				kind: last.kind,
+			})
+		}
+	}, [liveEvents])
+
 	/**
 	 * Forward orchestrator-side warnings published on the SSE bus
 	 * into the error toast queue. Previously these events landed in
@@ -347,6 +375,12 @@ export function App() {
 			const created = await agentApi.create(draft)
 			setAgents((prev) => [created, ...prev])
 			setAgentModalOpen(false)
+			track('agent_created', {
+				model: draft.model,
+				computer_use: draft.capabilities.computer_use.enabled,
+				browser_use: draft.capabilities.browser_use.enabled,
+				mcp_servers: draft.capabilities.mcp_servers.length,
+			})
 			// editor effect will pick up the new record on the next paint
 		} catch (err) {
 			pushError(toErrorCard(err, 'create agent', () => setSettingsOpen(true)))
@@ -362,6 +396,10 @@ export function App() {
 		if (!agentApi) return
 		try {
 			await agentApi.startRun({ agent_id: agentId, initial_message: initialMessage })
+			track('run_started', {
+				agent_id: agentId,
+				message_len: initialMessage.length,
+			})
 		} catch (err) {
 			pushError(toErrorCard(err, 'start run', () => setSettingsOpen(true)))
 		}
@@ -483,8 +521,17 @@ export function App() {
 		return (
 			<OnboardingWizard
 				displayName={realtime.handle ?? undefined}
-				onComplete={() => setOnboarded(true)}
-				onSkip={() => setOnboarded(true)}
+				onComplete={(result) => {
+					track('onboarding_step_done', {
+						providers: result.providers.length,
+						daily_budget_usd: Math.round(result.daily_budget_micros / 1_000_000),
+					})
+					setOnboarded(true)
+				}}
+				onSkip={() => {
+					track('onboarding_skipped')
+					setOnboarded(true)
+				}}
 			/>
 		)
 	}
@@ -518,7 +565,12 @@ export function App() {
 						spend={
 							<SpendIndicator accrued_micros={3_420_000} ceiling_micros={50_000_000} />
 						}
-						onSettingsClick={() => setSettingsOpen((s) => !s)}
+						onSettingsClick={() => {
+							setSettingsOpen((s) => {
+								if (!s) track('settings_opened')
+								return !s
+							})
+						}}
 					/>
 				}
 				leftRail={
@@ -562,7 +614,11 @@ export function App() {
 						settingsContent={
 							<SettingsDrawer
 								onClose={() => setSettingsOpen(false)}
-								onSave={() => {
+								onSave={(v) => {
+									track('settings_saved', {
+										has_anthropic: Boolean(v.anthropic_api_key),
+										has_e2b: Boolean(v.e2b_api_key),
+									})
 									// Dismiss the anthropic_not_configured warning if it
 									// was the active error; the next run will use the
 									// new key from the header.
@@ -608,7 +664,15 @@ export function App() {
 				{showEmptyState ? (
 					<EmptyState
 						onConnect={handleConnect}
-						onCreateAgent={() => setAgentModalOpen(true)}
+						onCreateAgent={() => {
+							setAgentModalInitial(null)
+							setAgentModalOpen(true)
+						}}
+						onPickStarter={(starter) => {
+							setAgentModalInitial(starter.draft)
+							setAgentModalOpen(true)
+							track('agent_starter_picked', { starter_id: starter.id })
+						}}
 					/>
 				) : (
 					<Tldraw
@@ -626,8 +690,12 @@ export function App() {
 
 			<NewAgentModal
 				open={agentModalOpen}
+				initialDraft={agentModalInitial}
 				onCreate={handleCreateAgent}
-				onClose={() => setAgentModalOpen(false)}
+				onClose={() => {
+					setAgentModalOpen(false)
+					setAgentModalInitial(null)
+				}}
 			/>
 		</>
 	)
@@ -755,6 +823,14 @@ function AgentRunPanel({
 			</Section>
 
 			<Section label="Run instruction">
+				{/*
+				 * Suggestion chips tailored to the agent's capabilities.
+				 * Clicking a chip fills the textarea so a user staring
+				 * at a blank input has three concrete starting points.
+				 * Browser/computer/MCP agents each get suggestions that
+				 * match what they can actually do.
+				 */}
+				<PromptSuggestions agent={agent} onPick={setMessage} />
 				<textarea
 					value={message}
 					onChange={(e) => setMessage(e.target.value)}
@@ -819,6 +895,91 @@ function AgentRunPanel({
 					</ul>
 				</Section>
 			)}
+		</div>
+	)
+}
+
+/**
+ * PromptSuggestions — three click-to-fill chips above the run-
+ * instruction textarea. The suggestions are derived from the
+ * agent's capability set so the user never sees a browser
+ * suggestion on an MCP-only agent.
+ *
+ * Intent: a tinkerer staring at a blank input rarely knows what
+ * the first prompt should look like. Three concrete examples
+ * give them a starting point they can edit instead of inventing
+ * from scratch.
+ */
+function PromptSuggestions({
+	agent,
+	onPick,
+}: {
+	agent: AgentApiRecord
+	onPick: (text: string) => void
+}) {
+	const suggestions: string[] = []
+	const c = agent.capabilities
+	if (c.computer_use.enabled) {
+		suggestions.push(
+			'Open Firefox and screenshot today\'s top story on news.ycombinator.com'
+		)
+	}
+	if (c.browser_use.enabled) {
+		suggestions.push('What did Anthropic announce this week? Cite your sources.')
+		suggestions.push('Find the GitHub stars count for tldraw/tldraw and report it.')
+	}
+	if (c.mcp_servers.length > 0) {
+		suggestions.push('List the tools available from each MCP server and explain one.')
+	}
+	if (suggestions.length === 0) {
+		// No capabilities yet — generic "what can you do" probe.
+		suggestions.push('What can you do? List your tools.')
+	}
+	// Cap at three so the row doesn't visually compete with the textarea.
+	const visible = suggestions.slice(0, 3)
+	return (
+		<div
+			style={{
+				display: 'flex',
+				flexWrap: 'wrap',
+				gap: 4,
+				marginBottom: 'var(--space-2)',
+			}}
+			aria-label="Prompt suggestions"
+		>
+			{visible.map((s) => (
+				<button
+					key={s}
+					type="button"
+					onClick={() => onPick(s)}
+					style={{
+						padding: '4px var(--space-2)',
+						background: 'var(--surface-sunk)',
+						border: '1px solid var(--border)',
+						borderRadius: 'var(--radius-pill)',
+						color: 'var(--text-muted)',
+						font: 'inherit',
+						fontFamily: 'var(--font-ui)',
+						fontSize: 11,
+						cursor: 'pointer',
+						maxWidth: '100%',
+						overflow: 'hidden',
+						textOverflow: 'ellipsis',
+						whiteSpace: 'nowrap',
+					}}
+					title={s}
+					onMouseEnter={(e) => {
+						e.currentTarget.style.borderColor = 'var(--accent)'
+						e.currentTarget.style.color = 'var(--accent)'
+					}}
+					onMouseLeave={(e) => {
+						e.currentTarget.style.borderColor = 'var(--border)'
+						e.currentTarget.style.color = 'var(--text-muted)'
+					}}
+				>
+					{s.length > 60 ? `${s.slice(0, 60)}…` : s}
+				</button>
+			))}
 		</div>
 	)
 }
