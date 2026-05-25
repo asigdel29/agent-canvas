@@ -17,6 +17,17 @@ import { ConnectorRegistry } from '@agent-canvas/connector-core'
 import { InMemoryAuditLog, type AuditLog } from './orchestration/auditLog.js'
 import { InMemoryNonceStore, type NonceStore } from './auth/sseToken.js'
 import { tryCreateUpstashNonceStore } from './auth/upstashNonceStore.js'
+import {
+	type AgentStore,
+	InMemoryAgentStore,
+	PostgresAgentStore,
+} from './agents/agentStore.js'
+import {
+	type ApprovalStore,
+	InMemoryApprovalStore,
+	PostgresApprovalStore,
+} from './agents/approvalStore.js'
+import { StoreBackedApprovalGate } from './agents/storeBackedApprovalGate.js'
 import { IngestionPipeline } from './orchestration/ingestionPipeline.js'
 import { RunCoordinator } from './orchestration/runCoordinator.js'
 import { TriggerRouter } from './orchestration/triggerRouter.js'
@@ -87,6 +98,9 @@ export interface Runtime {
 	readonly triggerRouter: TriggerRouter
 	readonly auditLog: AuditLog
 	readonly sseNonces: NonceStore
+	readonly agentStore: AgentStore
+	readonly approvalStore: ApprovalStore
+	readonly approvalGate: StoreBackedApprovalGate
 }
 
 let cached: Runtime | null = null
@@ -207,6 +221,27 @@ function build(): Runtime {
 		)
 	}
 
+	// Agent persistence — Postgres when DATABASE_URL is set, in-memory
+	// otherwise. Same selection rule as every other store; consistent
+	// with the project's "dev runs entirely in process, prod uses
+	// Postgres" rule.
+	const agentStore: AgentStore = sql
+		? new PostgresAgentStore(sql)
+		: new InMemoryAgentStore()
+
+	const approvalStore: ApprovalStore = sql
+		? new PostgresApprovalStore(sql)
+		: new InMemoryApprovalStore()
+
+	const approvalGate = new StoreBackedApprovalGate({
+		store: approvalStore,
+		onRequest: (req) => {
+			// Already emitted as approval_required by the run loop; this
+			// hook is here so future SSE-broadcast layers can react.
+			void req
+		},
+	})
+
 	return {
 		registry,
 		endpoint,
@@ -220,5 +255,8 @@ function build(): Runtime {
 		triggerRouter,
 		auditLog,
 		sseNonces,
+		agentStore,
+		approvalStore,
+		approvalGate,
 	}
 }

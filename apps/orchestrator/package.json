@@ -17,6 +17,7 @@
     "@agent-canvas/connector-core": "*",
     "@agent-canvas/orchestrator-types": "*",
     "@aws-sdk/client-kms": "^3.700.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "postgres": "^3.4.0"
   },
   "devDependencies": {

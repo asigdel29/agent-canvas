@@ -1,0 +1,158 @@
+/**
+ * POST /api/agents/runs
+ *   body: { agent_id, room_id, initial_message }
+ *
+ * Starts a run for an existing agent. Returns immediately with the
+ * run_id; the run itself executes asynchronously and publishes its
+ * progress through the room SSE bus. The client connects to the
+ * room and watches events stream in.
+ *
+ * Why a flat /api/agents/runs route (not /api/agents/:id/runs)?
+ * Vercel's file router treats [id]/runs as a nested dynamic
+ * segment that needs its own folder; the flat shape keeps the
+ * dev-server router simple and the request body already carries
+ * agent_id. The semantic mapping is the same.
+ *
+ * Production hardening still missing (P1):
+ *   - BillingGate check before spending tokens
+ *   - Per-workspace membership check
+ *   - Rate limit per agent
+ */
+
+import type { RoomId } from '@agent-canvas/orchestrator-types'
+
+import { getRuntime } from '../../dist/index.js'
+import { extractSession } from '../../dist/auth/session.js'
+import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
+import type { AgentId } from '../../dist/agents/agentRecord.js'
+import { tryCreateAnthropicClient } from '../../dist/agents/anthropicClient.js'
+import { buildMcpContribution } from '../../dist/agents/providers/mcpProvider.js'
+import {
+	BusRunEventSink,
+	newRunId,
+	runLoop,
+} from '../../dist/agents/runLoop.js'
+import { composeToolCatalog } from '../../dist/agents/toolRegistry.js'
+
+export const config = { runtime: 'nodejs' }
+
+export default async function handler(req: Request): Promise<Response> {
+	const preflight = preflightResponse(req)
+	if (preflight) return preflight
+	if (req.method !== 'POST') {
+		return withCorsHeaders(req, jsonError(405, 'method_not_allowed'))
+	}
+
+	const secret = process.env['JWT_SECRET']
+	if (!secret) return withCorsHeaders(req, jsonError(500, 'jwt_secret_not_configured'))
+	const session = extractSession(req, secret)
+	if (!session) return withCorsHeaders(req, jsonError(401, 'unauthorized'))
+
+	const runtime = getRuntime() as unknown as {
+		agentStore?: import('../../dist/agents/agentStore.js').AgentStore
+		approvalGate?: import('../../dist/agents/storeBackedApprovalGate.js').StoreBackedApprovalGate
+		roomEventBus?: import('../../dist/sync/roomEventBus.js').RoomEventBus
+	}
+	const agentStore = runtime.agentStore
+	const approvalGate = runtime.approvalGate
+	const bus = runtime.roomEventBus
+	if (!agentStore || !approvalGate || !bus) {
+		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
+	}
+
+	const anthropic = tryCreateAnthropicClient()
+	if (!anthropic) {
+		return withCorsHeaders(
+			req,
+			jsonError(
+				503,
+				'anthropic_not_configured',
+				'set ANTHROPIC_API_KEY to enable agent execution'
+			)
+		)
+	}
+
+	let body: { agent_id?: string; room_id?: string; initial_message?: string }
+	try {
+		body = (await req.json()) as typeof body
+	} catch {
+		return withCorsHeaders(req, jsonError(400, 'malformed_json'))
+	}
+	if (!body.agent_id || !body.room_id || !body.initial_message) {
+		return withCorsHeaders(
+			req,
+			jsonError(400, 'missing_fields', 'agent_id, room_id, initial_message all required')
+		)
+	}
+
+	const agent = await agentStore.get(body.agent_id as AgentId)
+	if (!agent) return withCorsHeaders(req, jsonError(404, 'agent_not_found'))
+
+	const run_id = newRunId()
+	const room_id = body.room_id as RoomId
+
+	// Build the MCP contribution before responding so a connect
+	// failure surfaces as 502 instead of going silent on a 202.
+	const mcpContribution = await buildMcpContribution(
+		agent.capabilities.mcp_servers,
+		{
+			onServerError: (server, err) => {
+				bus.publish(room_id, {
+					seq: 0,
+					run_id,
+					kind: 'mcp_connect_failed' as never,
+					ts: new Date().toISOString(),
+					schema_version: 1,
+					payload: { server_id: server.id, message: err.message },
+				})
+			},
+		}
+	)
+	const catalog = composeToolCatalog([mcpContribution])
+
+	const sink = new BusRunEventSink(bus, room_id)
+
+	// Fire-and-forget — the run can outlive this HTTP request. We
+	// return immediately with the run_id; events flow through SSE.
+	void (async () => {
+		try {
+			await runLoop(
+				{
+					run_id,
+					room_id,
+					agent,
+					initial_user_message: body.initial_message!,
+				},
+				{ anthropic, catalog, sink, approvalGate }
+			)
+		} catch (err) {
+			// runLoop should never throw (catches its own errors and
+			// returns a summary), but defend against future changes.
+			bus.publish(room_id, {
+				seq: 999_999,
+				run_id,
+				kind: 'run_failed' as never,
+				ts: new Date().toISOString(),
+				schema_version: 1,
+				payload: {
+					final_error: err instanceof Error ? err.message : String(err),
+				},
+			})
+		}
+	})()
+
+	return withCorsHeaders(
+		req,
+		new Response(JSON.stringify({ run_id, agent_id: agent.id, room_id }), {
+			status: 202,
+			headers: { 'content-type': 'application/json' },
+		})
+	)
+}
+
+function jsonError(status: number, code: string, detail?: string): Response {
+	return new Response(JSON.stringify({ error: code, detail }), {
+		status,
+		headers: { 'content-type': 'application/json' },
+	})
+}
