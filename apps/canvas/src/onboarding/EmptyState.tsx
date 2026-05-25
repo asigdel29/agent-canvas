@@ -14,6 +14,14 @@ export type StarterProvider = 'github' | 'linear' | 'slack' | 'vercel'
 
 export interface EmptyStateProps {
 	readonly onConnect: (provider: StarterProvider) => void
+	/**
+	 * Optional handler for the primary "Create your first agent"
+	 * CTA. When supplied, the empty state shows the create-agent
+	 * button as the top action and the connector tiles drop to a
+	 * secondary "Or connect a tool" row. Without this prop, the
+	 * empty state falls back to its original tiles-only layout.
+	 */
+	readonly onCreateAgent?: () => void
 }
 
 const TILES: { id: StarterProvider; label: string; tagline: string }[] = [
@@ -23,7 +31,11 @@ const TILES: { id: StarterProvider; label: string; tagline: string }[] = [
 	{ id: 'vercel', label: 'Vercel', tagline: 'Deploys and previews' },
 ]
 
-export function EmptyState({ onConnect }: EmptyStateProps) {
+export function EmptyState({ onConnect, onCreateAgent }: EmptyStateProps) {
+	const headline = onCreateAgent ? 'Drop your first agent' : 'Connect a tool to start'
+	const sub = onCreateAgent
+		? 'An agent is a Claude-driven worker that you wire to MCP servers, a browser, or a sandboxed desktop.'
+		: 'You can add more after.'
 	return (
 		<div
 			role="region"
@@ -56,18 +68,71 @@ export function EmptyState({ onConnect }: EmptyStateProps) {
 							margin: 0,
 						}}
 					>
-						Connect a tool to start
+						{headline}
 					</h1>
 					<p
 						style={{
 							margin: 0,
 							fontSize: 'var(--font-13)',
 							color: 'var(--text-muted)',
+							lineHeight: 1.5,
 						}}
 					>
-						You can add more after.
+						{sub}
 					</p>
 				</header>
+
+				{/*
+				 * Primary CTA: create an agent directly. Previously the
+				 * EmptyState only offered connector tiles, leaving users
+				 * who didn't have webhook secrets in a dead end. With
+				 * onCreateAgent supplied, this becomes the primary path
+				 * and the connector tiles drop to a secondary row.
+				 */}
+				{onCreateAgent && (
+					<button
+						type="button"
+						onClick={onCreateAgent}
+						style={{
+							display: 'inline-flex',
+							alignItems: 'center',
+							justifyContent: 'center',
+							gap: 'var(--space-2)',
+							width: '100%',
+							height: 44,
+							padding: '0 var(--space-4)',
+							background: 'var(--accent)',
+							color: 'var(--text-on-accent)',
+							border: 'none',
+							borderRadius: 'var(--radius-md)',
+							font: 'inherit',
+							fontFamily: 'var(--font-ui)',
+							fontSize: 'var(--font-14)',
+							fontWeight: 500,
+							cursor: 'pointer',
+						}}
+					>
+						+ Create your first agent
+					</button>
+				)}
+
+				{onCreateAgent && (
+					<div
+						style={{
+							display: 'flex',
+							alignItems: 'center',
+							gap: 'var(--space-2)',
+							color: 'var(--text-muted)',
+							fontSize: 'var(--font-12)',
+							width: '100%',
+						}}
+					>
+						<span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+						<span>or wire a tool first</span>
+						<span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+					</div>
+				)}
+
 				<div
 					style={{
 						display: 'grid',
