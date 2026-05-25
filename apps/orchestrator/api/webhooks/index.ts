@@ -24,6 +24,7 @@ import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import { withRateLimit } from '../../dist/rateLimit/withRateLimit.js'
 import { validateWebhookUrl } from '../../dist/webhooks/validateWebhookUrl.js'
+import { auditAndDispatch } from '../../dist/audit/auditAndDispatch.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import type { WorkspaceId } from '../../dist/tenancy/tenancyTypes.js'
 
@@ -38,15 +39,17 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const runtime = getRuntime() as unknown as {
 		webhookEndpointStore?: import('../../dist/webhooks/webhookEndpointStore.js').WebhookEndpointStore
+		webhookDeliveryStore?: import('../../dist/webhooks/webhookDeliveryStore.js').WebhookDeliveryStore
 		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
 		rateLimitStore?: import('../../dist/rateLimit/rateLimitStore.js').RateLimitStore
 		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
 	}
 	const store = runtime.webhookEndpointStore
+	const deliveryStore = runtime.webhookDeliveryStore
 	const tenancy = runtime.tenancyStore
 	const rateLimit = runtime.rateLimitStore
 	const audit = runtime.workspaceAuditStore
-	if (!store || !tenancy || !rateLimit || !audit) {
+	if (!store || !deliveryStore || !tenancy || !rateLimit || !audit) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -120,9 +123,8 @@ export default async function handler(req: Request): Promise<Response> {
 			...(events !== undefined ? { events } : {}),
 			...(body.description !== undefined ? { description: body.description } : {}),
 		})
-		// Audit. The full URL is sensitive (it may carry a path-baked
-		// secret), so we record host only. Subscribed event list is
-		// safe and useful in the trail.
+		// Audit + webhook fan-out. URL host only (full URL may carry a
+		// path-baked secret); subscribed event list is safe.
 		const urlHost = (() => {
 			try {
 				return new URL(created.record.url).host
@@ -130,16 +132,17 @@ export default async function handler(req: Request): Promise<Response> {
 				return 'unknown'
 			}
 		})()
-		void audit
-			.append({
+		void auditAndDispatch(
+			{ audit, endpointStore: store, deliveryStore },
+			{
 				workspace_id,
 				actor_user_id: user_id,
 				action: 'webhook.created',
 				target_type: 'webhook_endpoint',
 				target_id: created.record.id,
 				details: { url_host: urlHost, events: created.record.events },
-			})
-			.catch(() => undefined)
+			}
+		)
 		return withCorsHeaders(
 			req,
 			new Response(
