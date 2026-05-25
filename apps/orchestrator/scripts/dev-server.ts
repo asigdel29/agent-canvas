@@ -57,6 +57,8 @@ import agentByIdHandler from '../api/agents/[id].js'
 import agentRunsHandler from '../api/agents/runs.js'
 import agentProbeMcpHandler from '../api/agents/probe-mcp.js'
 import feedbackHandler from '../api/feedback.js'
+import tokensIndexHandler from '../api/tokens/index.js'
+import tokenByIdHandler from '../api/tokens/[id].js'
 import approvalsIndexHandler from '../api/approvals/index.js'
 import approvalByIdHandler from '../api/approvals/[id].js'
 import syncHandler from '../api/sync/[room].js'
@@ -113,6 +115,15 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	}
 	if (pathname === '/api/feedback' && (method === 'POST' || opts)) {
 		return feedbackHandler
+	}
+	if (pathname === '/api/tokens' && (method === 'GET' || method === 'POST' || opts)) {
+		return tokensIndexHandler
+	}
+	if (
+		pathname.match(/^\/api\/tokens\/[^/]+$/) &&
+		(method === 'DELETE' || opts)
+	) {
+		return tokenByIdHandler
 	}
 	if (
 		pathname.match(/^\/api\/agents\/[^/]+$/) &&
