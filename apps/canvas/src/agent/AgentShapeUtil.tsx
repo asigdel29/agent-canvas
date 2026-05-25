@@ -54,6 +54,12 @@ export interface AgentShapeProps {
 	cap_mcp_server_ids: string[]
 	/** One-line summary shown in the compact mode footer; recomputed on capability change. */
 	cap_summary: string
+	/**
+	 * Most recent screenshot from a computer-use run, as a data: URI.
+	 * Empty string means no screenshot yet. The shape renders a small
+	 * thumbnail in the card when set.
+	 */
+	last_screenshot_data_uri: string
 }
 
 export type AgentShape = TLBaseShape<'agent', AgentShapeProps>
@@ -98,6 +104,7 @@ export class AgentShapeUtil extends ShapeUtil<AgentShape> {
 		cap_browser_use: T.boolean,
 		cap_mcp_server_ids: T.arrayOf(T.string),
 		cap_summary: T.string,
+		last_screenshot_data_uri: T.string,
 	}
 
 	override getDefaultProps(): AgentShape['props'] {
@@ -117,6 +124,7 @@ export class AgentShapeUtil extends ShapeUtil<AgentShape> {
 			cap_browser_use: false,
 			cap_mcp_server_ids: [],
 			cap_summary: 'no capabilities',
+			last_screenshot_data_uri: '',
 		}
 	}
 
@@ -162,6 +170,9 @@ export class AgentShapeUtil extends ShapeUtil<AgentShape> {
 							{shape.props.vendor && <span> · {shape.props.vendor}</span>}
 						</div>
 						<CapabilityRow shape={shape} />
+						{shape.props.last_screenshot_data_uri && (
+							<ScreenshotThumb dataUri={shape.props.last_screenshot_data_uri} />
+						)}
 					</>
 				)}
 			</HTMLContainer>
@@ -246,6 +257,32 @@ function CapabilityRow({ shape }: { shape: AgentShape }) {
 				</Chip>
 			))}
 		</div>
+	)
+}
+
+/**
+ * ScreenshotThumb — small live preview of the most recent
+ * computer-use screenshot. Width fills the card; height is capped
+ * so the shape stays compact. Pointer-events are disabled so the
+ * image doesn't intercept canvas drags.
+ */
+function ScreenshotThumb({ dataUri }: { dataUri: string }) {
+	return (
+		<img
+			src={dataUri}
+			alt="Latest computer-use screenshot"
+			draggable={false}
+			style={{
+				marginTop: 'var(--space-1)',
+				width: '100%',
+				maxHeight: 180,
+				objectFit: 'cover',
+				borderRadius: 'var(--radius-md)',
+				border: '1px solid var(--border)',
+				pointerEvents: 'none',
+				background: 'var(--surface-sunk)',
+			}}
+		/>
 	)
 }
 

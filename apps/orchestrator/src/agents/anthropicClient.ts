@@ -55,11 +55,26 @@ export interface Message {
 }
 
 /**
- * One tool the model can call. Mirrors the Anthropic schema.
- * `input_schema` is JSON Schema; the model validates against it
- * before emitting a tool_use.
+ * One tool the model can call. Two shapes:
+ *
+ *   StandardToolSchema   the JSON-Schema-described custom tool
+ *                        used by MCP and browser providers. The
+ *                        model validates input against
+ *                        input_schema before emitting tool_use.
+ *
+ *   ComputerToolSchema   Anthropic's built-in computer-use tool
+ *                        (`computer_20241022`). The schema is
+ *                        implicit on the model side; we just
+ *                        declare the display dimensions. The model
+ *                        sends tool_use with an `action` field
+ *                        plus action-specific args.
+ *
+ * Both are flat objects so JSON serialization stays identical to
+ * the Anthropic API contract.
  */
-export interface ToolSchema {
+export type ToolSchema = StandardToolSchema | ComputerToolSchema
+
+export interface StandardToolSchema {
 	readonly name: string
 	readonly description: string
 	readonly input_schema: {
@@ -67,6 +82,19 @@ export interface ToolSchema {
 		readonly properties: Readonly<Record<string, unknown>>
 		readonly required?: readonly string[]
 	}
+}
+
+export interface ComputerToolSchema {
+	readonly type: 'computer_20241022'
+	readonly name: 'computer'
+	readonly display_width_px: number
+	readonly display_height_px: number
+	readonly display_number?: number
+}
+
+/** Type guard: cheap discriminator between the two shapes. */
+export function isComputerToolSchema(t: ToolSchema): t is ComputerToolSchema {
+	return (t as ComputerToolSchema).type === 'computer_20241022'
 }
 
 export interface CreateMessageRequest {
