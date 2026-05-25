@@ -27,6 +27,8 @@ import {
 	InMemoryTenancyStore,
 	PostgresTenancyStore,
 } from './tenancy/tenancyStore.js'
+import { logger } from './observability/logger.js'
+import { makeSentryErrorHook } from './observability/errorReporter.js'
 import {
 	type ApprovalStore,
 	InMemoryApprovalStore,
@@ -123,6 +125,17 @@ export function resetRuntimeForTesting(): void {
 }
 
 function build(): Runtime {
+	// Wire the Sentry error sink once at boot. The hook is a no-op
+	// when SENTRY_DSN is unset, so local dev pays nothing for it.
+	logger.addErrorHook(makeSentryErrorHook())
+	logger.info('runtime_boot', {
+		has_postgres: !!process.env['DATABASE_URL'],
+		has_anthropic_env: !!process.env['ANTHROPIC_API_KEY'],
+		has_e2b_env: !!process.env['E2B_API_KEY'],
+		has_sentry: !!process.env['SENTRY_DSN'],
+		has_upstash: !!process.env['UPSTASH_REDIS_REST_URL'],
+	})
+
 	const usePg = !!process.env['DATABASE_URL']
 	const sql = usePg ? createSqlClient() : null
 
