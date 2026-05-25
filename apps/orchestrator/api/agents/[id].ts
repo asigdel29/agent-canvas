@@ -17,8 +17,6 @@ import {
 	type UpdateAgentInput,
 } from '../../dist/agents/agentRecord.js'
 
-export const config = { runtime: 'nodejs' }
-
 export default async function handler(req: Request): Promise<Response> {
 	const preflight = preflightResponse(req)
 	if (preflight) return preflight

@@ -5,6 +5,9 @@
   "description": "Backend orchestrator: command endpoint, event log, projector, reconciler, vault, billing gate, input sanitizer.",
   "type": "module",
   "main": "./dist/index.js",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty",

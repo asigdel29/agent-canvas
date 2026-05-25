@@ -21,10 +21,6 @@ import { extractSession } from '../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../dist/http/cors.js'
 import type { Command, UserId } from '@agent-canvas/orchestrator-types'
 
-export const config = {
-	runtime: 'nodejs',
-}
-
 export default async function handler(req: Request): Promise<Response> {
 	const preflight = preflightResponse(req)
 	if (preflight) return preflight

@@ -1,7 +1,5 @@
 {
 	"$schema": "https://openapi.vercel.sh/vercel.json",
-	"buildCommand": "npm run build --workspace=@agent-canvas/orchestrator-types --workspace=@agent-canvas/canvas",
-	"installCommand": "npm install --workspaces --include-workspace-root",
-	"outputDirectory": "dist",
-	"framework": "vite"
+	"framework": "vite",
+	"outputDirectory": "dist"
 }
