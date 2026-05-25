@@ -1,19 +1,23 @@
 /**
  * App — the canvas client root.
  *
- * Renders tldraw with the custom AgentShapeUtil registered, plus the
- * surrounding workspace chrome (connector strip, approval inbox, spend
- * banner) per design review hierarchy.
+ * Composes the three-zone Shell (TopBar / LeftRail / canvas /
+ * RightRail) plus the floating chrome overlays (toolbar top centre,
+ * zoom cluster bottom right). The canvas itself is Tldraw with the
+ * agent ShapeUtil registered; when no connectors are configured the
+ * canvas area shows the EmptyState card instead.
  *
- * Realtime: if the URL carries `?room=<id>&session=<jwt>`, the app moves
- * the session JWT into sessionStorage and strips it from the URL via
- * `history.replaceState` BEFORE any other code runs. This collapses the
- * leak window for the long-lived session credential to the single round
- * trip that delivers the page; CDN access logs, Referer headers, and
- * browser history never see it. The session is then used to mint
- * short-lived (60s, single-use) SSE tokens for the realtime stream.
+ * Realtime: when the URL carries `?room=<id>&session=<jwt>` the app
+ * moves the session JWT into sessionStorage and strips it from the
+ * URL via history.replaceState BEFORE any other code runs. This
+ * collapses the leak window for the long-lived session credential
+ * to the single round trip that delivers the page; CDN access logs,
+ * Referer headers, and browser history never see it. The session is
+ * then used to mint short-lived (60s, single-use) SSE tokens for the
+ * realtime stream.
  *
- * Orchestrator base URL: VITE_ORCHESTRATOR_URL (default http://localhost:3000).
+ * Orchestrator base URL: VITE_ORCHESTRATOR_URL (default
+ * http://localhost:3000).
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -24,8 +28,21 @@ import { AgentShapeUtil } from './agent/AgentShapeUtil.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
 import { EmptyState, type StarterProvider } from './onboarding/EmptyState.js'
-import { SpendBanner } from './spend/SpendBanner.js'
-import { LiveEvents } from './sync/LiveEvents.js'
+import { SpendIndicator } from './spend/SpendBanner.js'
+import { Shell } from './layout/Shell.js'
+import { TopBar } from './layout/TopBar.js'
+import { LeftRail, type RailItem } from './layout/LeftRail.js'
+import { RightRail, type RightRailMode } from './layout/RightRail.js'
+import {
+	FloatingToolbar,
+	IconAgent,
+	IconComment,
+	IconConnector,
+	IconHand,
+	IconSelect,
+	type ToolbarTool,
+} from './layout/FloatingToolbar.js'
+import { ZoomCluster } from './layout/ZoomCluster.js'
 import { RoomEventClient, type RunEventPayload } from './sync/RoomEventClient.js'
 
 const SHAPE_UTILS = [AgentShapeUtil]
@@ -40,12 +57,28 @@ const SESSION_STORAGE_KEY = 'agent-canvas:session'
 const ROOM_STORAGE_KEY = 'agent-canvas:room'
 
 /**
- * Pull the session JWT and room id out of the URL ONCE on first load,
- * stash them in sessionStorage, and rewrite the URL so the credential
- * does not survive in history / Referer / CDN access logs.
+ * Roughly: 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 30s, 30s, ... — 20
+ * attempts is roughly 9.5 minutes at the 30s max-backoff cap. After
+ * that we give up and surface the disconnected banner so a phone
+ * left on a dead network stops draining battery.
+ */
+const MAX_RECONNECT_ATTEMPTS = 20
+
+const TOOLS: readonly ToolbarTool[] = [
+	{ id: 'hand', label: 'Hand', shortcut: 'H', icon: <IconHand /> },
+	{ id: 'select', label: 'Select', shortcut: 'V', icon: <IconSelect /> },
+	{ id: 'agent', label: 'New agent', shortcut: 'A', icon: <IconAgent /> },
+	{ id: 'connector', label: 'New connector', shortcut: 'C', icon: <IconConnector /> },
+	{ id: 'comment', label: 'Comment', shortcut: '/', icon: <IconComment /> },
+]
+
+/**
+ * Pulls the session JWT and room id out of the URL once on first
+ * load, stashes them in sessionStorage, and rewrites the URL so the
+ * credential does not survive in history, Referer, or CDN logs.
  *
  * Returns whatever pair is available — URL takes precedence on first
- * load, sessionStorage on subsequent reads (e.g. after replaceState).
+ * load, sessionStorage on subsequent reads.
  */
 function intakeAndStashCredentials(): { room: string; session: string } | null {
 	if (typeof window === 'undefined') return null
@@ -57,8 +90,8 @@ function intakeAndStashCredentials(): { room: string; session: string } | null {
 			window.sessionStorage.setItem(SESSION_STORAGE_KEY, urlSession)
 			window.sessionStorage.setItem(ROOM_STORAGE_KEY, urlRoom)
 		} catch {
-			// sessionStorage may be disabled (private mode / iframe sandbox).
-			// Fall through; the URL still carries the values for this load.
+			// sessionStorage may be disabled (private mode, sandboxed iframe).
+			// The URL still carries the values for this load.
 		}
 		url.searchParams.delete('session')
 		url.searchParams.delete('room')
@@ -75,12 +108,6 @@ function intakeAndStashCredentials(): { room: string; session: string } | null {
 	return null
 }
 
-// Roughly: 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 30s, 30s, ...
-// 20 attempts ≈ ~9.5 minutes at the 30s max-backoff cap. After that
-// we give up and surface "lost connection" so a phone left on a dead
-// network stops draining battery and the user knows to refresh.
-const MAX_RECONNECT_ATTEMPTS = 20
-
 export function App() {
 	const [connectors, setConnectors] = useState<readonly ConnectorTile[]>([])
 	const [approvals, setApprovals] = useState<readonly ApprovalCard[]>([])
@@ -88,6 +115,10 @@ export function App() {
 	const [realtimeStatus, setRealtimeStatus] = useState<'connected' | 'disconnected'>(
 		'connected'
 	)
+	const [activeTool, setActiveTool] = useState<string>('select')
+	const [zoomPercent] = useState<number>(100)
+	const [density, setDensity] = useState<'compact' | 'full'>('full')
+	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
 	const realtime = useMemo(() => intakeAndStashCredentials(), [])
 
@@ -121,8 +152,6 @@ export function App() {
 		return () => client.close()
 	}, [realtime])
 
-	const hasAnyConnector = connectors.length > 0
-
 	function handleConnect(provider: StarterProvider) {
 		setConnectors((prev) => [
 			...prev,
@@ -142,71 +171,224 @@ export function App() {
 		])
 	}
 
-	const view = useMemo(() => {
-		if (!hasAnyConnector && !realtime) return <EmptyState onConnect={handleConnect} />
-		return (
-			<>
-				<ConnectorStrip tiles={connectors} onClick={() => {}} />
-				<ApprovalInbox
-					cards={approvals}
-					onApprove={(card) => setApprovals((p) => p.filter((c) => c.id !== card.id))}
-					onReject={(card) => setApprovals((p) => p.filter((c) => c.id !== card.id))}
-				/>
-				<SpendBanner accrued_micros={3_420_000} ceiling_micros={50_000_000} />
-				<LiveEvents events={liveEvents} />
-				{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
-				<Tldraw shapeUtils={SHAPE_UTILS} />
-			</>
-		)
-	}, [hasAnyConnector, realtime, connectors, approvals, liveEvents, realtimeStatus])
+	// Synthesise left-rail rows from current state.
+	const workflowItems: readonly RailItem[] = useMemo(
+		() =>
+			connectors.map((c) => ({
+				id: `wf:${c.id}`,
+				label: `${c.label} workflow`,
+				sublabel: 'no runs yet',
+			})),
+		[connectors]
+	)
 
-	return <main style={{ position: 'relative', width: '100%', height: '100%' }}>{view}</main>
+	const runItems: readonly RailItem[] = useMemo(() => {
+		const byRun = new Map<string, { count: number; lastKind: string; isLive: boolean }>()
+		for (const e of liveEvents) {
+			const cur = byRun.get(e.run_id) ?? { count: 0, lastKind: e.kind, isLive: false }
+			cur.count += 1
+			cur.lastKind = e.kind
+			cur.isLive = e.kind === 'running' || e.kind === 'progress'
+			byRun.set(e.run_id, cur)
+		}
+		return Array.from(byRun.entries()).map(([run_id, s]) => ({
+			id: run_id,
+			label: run_id,
+			sublabel: `${s.count} events · ${s.lastKind}`,
+			isLive: s.isLive,
+		}))
+	}, [liveEvents])
+
+	const hasAnyConnector = connectors.length > 0
+	const showEmptyState = !hasAnyConnector && !realtime
+
+	const rightRailMode: RightRailMode = selectedRunId
+		? 'inspector'
+		: liveEvents.length > 0 || approvals.length > 0
+			? 'activity'
+			: 'empty'
+
+	return (
+		<Shell
+			topBar={
+				<TopBar
+					workspaceName="Untitled workspace"
+					breadcrumbs={['canvas', 'starter']}
+					presenceAvatars={[{ id: 'u_anu', label: 'Anu', color: 'var(--accent)' }]}
+					spend={<SpendIndicator accrued_micros={3_420_000} ceiling_micros={50_000_000} />}
+				/>
+			}
+			leftRail={
+				<>
+					<LeftRail
+						workflows={workflowItems}
+						runs={runItems}
+						selectedId={selectedRunId}
+						onSelect={setSelectedRunId}
+					/>
+					<ConnectorStrip
+						tiles={connectors}
+						onClick={() => {
+							/* connector settings — wire in a follow-up */
+						}}
+					/>
+				</>
+			}
+			rightRail={
+				<RightRail
+					mode={rightRailMode}
+					inspectorContent={
+						selectedRunId ? (
+							<InspectorPlaceholder runId={selectedRunId} events={liveEvents} />
+						) : null
+					}
+					activityEvents={liveEvents}
+					approvalsContent={
+						<ApprovalInbox
+							cards={approvals}
+							onApprove={(card) =>
+								setApprovals((p) => p.filter((c) => c.id !== card.id))
+							}
+							onReject={(card) =>
+								setApprovals((p) => p.filter((c) => c.id !== card.id))
+							}
+						/>
+					}
+				/>
+			}
+			overlays={
+				!showEmptyState ? (
+					<>
+						<FloatingToolbar tools={TOOLS} activeId={activeTool} onSelect={setActiveTool} />
+						<ZoomCluster
+							zoomPercent={zoomPercent}
+							density={density}
+							onDensityToggle={() =>
+								setDensity((d) => (d === 'compact' ? 'full' : 'compact'))
+							}
+						/>
+						{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
+					</>
+				) : null
+			}
+		>
+			{showEmptyState ? (
+				<EmptyState onConnect={handleConnect} />
+			) : (
+				<Tldraw shapeUtils={SHAPE_UTILS} />
+			)}
+		</Shell>
+	)
 }
 
 /**
- * Surfaced when RoomEventClient.onGiveUp fires. The simplest possible
- * recovery affordance: tell the user the live feed stopped and let them
- * decide when to reload. We deliberately avoid auto-reload because the
- * user may be in the middle of editing the canvas.
+ * Disconnected banner — fires once the RoomEventClient gives up on
+ * reconnecting. Tells the user the live feed stopped and offers a
+ * single reload affordance. Auto-reload is deliberately avoided
+ * because the user may be mid-edit.
  */
 function DisconnectedBanner() {
 	return (
 		<aside
 			role="alert"
 			style={{
-				position: 'fixed',
-				top: 12,
-				right: 12,
-				padding: '10px 14px',
-				background: 'var(--surface-elev, #fff7ed)',
-				border: '1px solid var(--status-warn, #f59e0b)',
-				borderRadius: 8,
-				fontSize: 13,
-				zIndex: 20,
+				position: 'absolute',
+				top: 'var(--space-3)',
+				right: 'var(--space-3)',
+				padding: 'var(--space-2) var(--space-3)',
+				background: 'var(--live-soft)',
+				border: '1px solid var(--live)',
+				borderRadius: 'var(--radius-md)',
+				fontSize: 'var(--font-12)',
+				color: 'var(--text-strong)',
+				zIndex: 'var(--z-floating)',
 				maxWidth: 320,
-				boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+				boxShadow: 'var(--shadow-floating)',
+				display: 'grid',
+				gap: 2,
 			}}
 		>
-			<strong>Live feed disconnected.</strong>
-			<div style={{ marginTop: 4 }}>
-				Canvas is still editable. Reload to reconnect.{' '}
+			<strong style={{ fontSize: 'var(--font-13)' }}>Live feed disconnected.</strong>
+			<span style={{ color: 'var(--text-muted)' }}>
+				Canvas is still editable.{' '}
 				<button
 					type="button"
 					onClick={() => window.location.reload()}
 					style={{
 						background: 'transparent',
 						border: 'none',
-						color: 'var(--accent, #2563eb)',
+						color: 'var(--accent)',
 						cursor: 'pointer',
 						padding: 0,
 						font: 'inherit',
+						fontFamily: 'var(--font-ui)',
 						textDecoration: 'underline',
 					}}
 				>
-					Reload
+					Reload to reconnect
 				</button>
-			</div>
+			</span>
 		</aside>
+	)
+}
+
+/**
+ * Minimal inspector body until a real shape inspector lands in a
+ * follow-up. Shows the run id and a short event history so the
+ * right rail isn't empty when something is selected.
+ */
+function InspectorPlaceholder({
+	runId,
+	events,
+}: {
+	runId: string
+	events: readonly RunEventPayload[]
+}) {
+	const runEvents = events.filter((e) => e.run_id === runId).slice(-10)
+	return (
+		<div style={{ padding: 'var(--space-3)', display: 'grid', gap: 'var(--space-3)' }}>
+			<div style={{ display: 'grid', gap: 2 }}>
+				<div
+					style={{
+						fontSize: 11,
+						color: 'var(--text-muted)',
+						textTransform: 'uppercase',
+						letterSpacing: 0.6,
+					}}
+				>
+					Run id
+				</div>
+				<div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--font-13)' }}>{runId}</div>
+			</div>
+			{runEvents.length > 0 && (
+				<div style={{ display: 'grid', gap: 2 }}>
+					<div
+						style={{
+							fontSize: 11,
+							color: 'var(--text-muted)',
+							textTransform: 'uppercase',
+							letterSpacing: 0.6,
+						}}
+					>
+						Recent events
+					</div>
+					<ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 2 }}>
+						{runEvents.map((e) => (
+							<li
+								key={e.seq}
+								style={{
+									fontFamily: 'var(--font-mono)',
+									fontSize: 'var(--font-12)',
+									color: 'var(--text-strong)',
+								}}
+							>
+								#{e.seq} {e.kind}
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+		</div>
 	)
 }
 

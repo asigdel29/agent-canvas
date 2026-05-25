@@ -1,10 +1,16 @@
 /**
- * ApprovalInbox — top-right paginated stack of pending approval cards.
+ * ApprovalInbox — pending approval cards. Now lives inside the right
+ * rail (Activity mode) as a section above the live event feed.
  *
- * Per design review 21 (visual hierarchy) + the "approvals as inbox"
- * decision: cards are equal-weight, paginated, expandable, with a count
- * badge. Each card surfaces the tool name + description from the
- * SafetyClassifier; Approve / Reject buttons emit commands.
+ * Previously a floating top-right stack; the right-rail placement
+ * groups approvals with the activity feed because both are "things
+ * the run wants the operator to look at right now". The visual model
+ * stays: equal-weight cards, expandable, Approve / Reject buttons
+ * that emit commands.
+ *
+ * Each card uses the live-soft tint when the underlying action is
+ * irreversible — destructive-but-recoverable stays neutral so the
+ * eye learns to read the pink tint as "no undo".
  */
 
 export interface ApprovalCard {
@@ -24,40 +30,33 @@ export interface ApprovalInboxProps {
 }
 
 export function ApprovalInbox({ cards, onApprove, onReject }: ApprovalInboxProps) {
+	if (cards.length === 0) return null
 	return (
-		<aside
+		<section
 			aria-label="Pending approvals"
 			style={{
-				position: 'fixed',
-				top: 12,
-				right: 12,
-				width: 280,
-				display: 'flex',
-				flexDirection: 'column',
-				gap: 8,
-				pointerEvents: 'none',
-				zIndex: 10,
+				borderBottom: '1px solid var(--border)',
+				background: 'var(--surface-elev)',
 			}}
 		>
-			<span
+			<header
 				style={{
-					alignSelf: 'flex-end',
-					pointerEvents: 'auto',
-					padding: '4px 8px',
-					border: '1px solid var(--border)',
-					borderRadius: 999,
-					background: 'var(--surface-elev)',
-					color: 'var(--text-muted)',
-					fontFamily: 'var(--font-mono)',
+					padding: 'var(--space-2) var(--space-3)',
 					fontSize: 11,
+					fontWeight: 500,
+					color: 'var(--text-muted)',
+					textTransform: 'uppercase',
+					letterSpacing: 0.6,
 				}}
 			>
-				{cards.length} pending
-			</span>
-			{cards.map((card) => (
-				<Card key={card.id} card={card} onApprove={onApprove} onReject={onReject} />
-			))}
-		</aside>
+				Pending · {cards.length}
+			</header>
+			<div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+				{cards.map((card) => (
+					<Card key={card.id} card={card} onApprove={onApprove} onReject={onReject} />
+				))}
+			</div>
+		</section>
 	)
 }
 
@@ -70,47 +69,80 @@ function Card({
 	onApprove: (c: ApprovalCard) => void
 	onReject: (c: ApprovalCard) => void
 }) {
+	const isIrreversible = card.safety === 'irreversible'
 	return (
 		<article
 			style={{
-				pointerEvents: 'auto',
-				padding: '10px 12px',
-				border: '1px solid var(--border)',
-				borderRadius: 'var(--radius-lg)',
-				background: 'var(--surface-elev)',
-				boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-				fontSize: 13,
+				padding: 'var(--space-3)',
+				background: isIrreversible ? 'var(--live-soft)' : 'var(--surface-elev)',
+				borderTop: '1px solid var(--border)',
+				fontSize: 'var(--font-13)',
 				color: 'var(--text-strong)',
+				display: 'grid',
+				gap: 'var(--space-2)',
 			}}
 		>
 			<header
 				style={{
 					display: 'flex',
 					justifyContent: 'space-between',
-					fontSize: 11,
-					color: 'var(--text-muted)',
-					marginBottom: 4,
+					alignItems: 'baseline',
+					gap: 'var(--space-2)',
 				}}
 			>
-				<span style={{ fontWeight: 500, color: 'var(--text-strong)' }}>{card.run_title}</span>
-				<time>{relative(card.proposed_at)}</time>
+				<span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+					{card.run_title}
+				</span>
+				<time
+					dateTime={card.proposed_at}
+					style={{
+						fontSize: 11,
+						color: 'var(--text-muted)',
+						fontVariantNumeric: 'tabular-nums',
+					}}
+				>
+					{relative(card.proposed_at)}
+				</time>
 			</header>
-			<div style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{card.tool_name}</div>
-			<p style={{ margin: '6px 0 8px', fontSize: 12, color: 'var(--text-muted)' }}>
+			<div
+				style={{
+					fontFamily: 'var(--font-mono)',
+					fontSize: 'var(--font-12)',
+					color: isIrreversible ? 'var(--live)' : 'var(--text-strong)',
+				}}
+			>
+				{card.tool_name}
+				{isIrreversible && (
+					<span
+						aria-label="Irreversible action"
+						style={{ marginLeft: 6, fontFamily: 'var(--font-ui)', fontSize: 11 }}
+					>
+						· irreversible
+					</span>
+				)}
+			</div>
+			<p
+				style={{
+					margin: 0,
+					fontSize: 'var(--font-12)',
+					color: 'var(--text-muted)',
+					lineHeight: 1.5,
+				}}
+			>
 				{card.tool_description}
 			</p>
-			<div style={{ display: 'flex', gap: 6 }}>
+			<div style={{ display: 'flex', gap: 'var(--space-1)' }}>
 				<button
 					type="button"
 					onClick={() => onReject(card)}
-					style={{ flex: 1, ...buttonStyle(false) }}
+					style={{ flex: 1, ...buttonStyle('secondary') }}
 				>
 					Reject
 				</button>
 				<button
 					type="button"
 					onClick={() => onApprove(card)}
-					style={{ flex: 1, ...buttonStyle(true) }}
+					style={{ flex: 1, ...buttonStyle('primary') }}
 				>
 					Approve
 				</button>
@@ -119,15 +151,19 @@ function Card({
 	)
 }
 
-function buttonStyle(primary: boolean): React.CSSProperties {
+function buttonStyle(kind: 'primary' | 'secondary'): React.CSSProperties {
+	const isPrimary = kind === 'primary'
 	return {
-		padding: '6px 10px',
-		fontSize: 12,
+		height: 28,
+		padding: '0 var(--space-3)',
+		fontSize: 'var(--font-12)',
+		fontWeight: 500,
 		font: 'inherit',
-		borderRadius: 'var(--radius-sm)',
-		border: `1px solid var(--${primary ? 'accent' : 'border'})`,
-		background: primary ? 'var(--accent)' : 'var(--surface-elev)',
-		color: primary ? 'white' : 'var(--text-strong)',
+		fontFamily: 'var(--font-ui)',
+		borderRadius: 'var(--radius-md)',
+		border: isPrimary ? 'none' : '1px solid var(--border)',
+		background: isPrimary ? 'var(--text-strong)' : 'var(--surface-elev)',
+		color: isPrimary ? 'var(--text-on-accent)' : 'var(--text-strong)',
 		cursor: 'pointer',
 	}
 }
