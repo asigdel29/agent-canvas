@@ -21,6 +21,8 @@ import {
 	validateCreateInput,
 	type WorkspaceId,
 } from '../../dist/agents/agentRecord.js'
+import { TenancyForbiddenError } from '../../dist/tenancy/tenancyTypes.js'
+import type { UserId } from '@agent-canvas/orchestrator-types'
 
 export default async function handler(req: Request): Promise<Response> {
 	const preflight = preflightResponse(req)
@@ -34,15 +36,27 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const runtime = getRuntime() as unknown as {
 		agentStore?: import('../../dist/agents/agentStore.js').AgentStore
+		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
 	}
 	const store = runtime.agentStore
-	if (!store) return withCorsHeaders(req, jsonError(500, 'agent_store_not_initialized'))
+	const tenancy = runtime.tenancyStore
+	if (!store || !tenancy) {
+		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
+	}
 
 	if (req.method === 'GET') {
 		const url = new URL(req.url)
 		const workspace_id = url.searchParams.get('workspace_id') as WorkspaceId | null
 		if (!workspace_id) {
 			return withCorsHeaders(req, jsonError(400, 'missing_workspace_id'))
+		}
+		try {
+			await tenancy.requireMembership(session.sub as UserId, workspace_id, 'viewer')
+		} catch (err) {
+			if (err instanceof TenancyForbiddenError) {
+				return withCorsHeaders(req, jsonError(403, 'workspace_forbidden'))
+			}
+			throw err
 		}
 		const items = await store.listByWorkspace(workspace_id)
 		return withCorsHeaders(
@@ -67,6 +81,17 @@ export default async function handler(req: Request): Promise<Response> {
 		const input: CreateAgentInput = {
 			...body,
 			owner_user_id: session.sub,
+		}
+		// Workspace membership gate. Member or higher can create agents.
+		// Body must carry workspace_id; the membership check ensures
+		// the session user actually belongs to that workspace.
+		try {
+			await tenancy.requireMembership(session.sub as UserId, input.workspace_id, 'member')
+		} catch (err) {
+			if (err instanceof TenancyForbiddenError) {
+				return withCorsHeaders(req, jsonError(403, 'workspace_forbidden'))
+			}
+			throw err
 		}
 		try {
 			validateCreateInput(input)

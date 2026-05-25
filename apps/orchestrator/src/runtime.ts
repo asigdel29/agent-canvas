@@ -23,6 +23,11 @@ import {
 	PostgresAgentStore,
 } from './agents/agentStore.js'
 import {
+	type TenancyStore,
+	InMemoryTenancyStore,
+	PostgresTenancyStore,
+} from './tenancy/tenancyStore.js'
+import {
 	type ApprovalStore,
 	InMemoryApprovalStore,
 	PostgresApprovalStore,
@@ -101,6 +106,7 @@ export interface Runtime {
 	readonly agentStore: AgentStore
 	readonly approvalStore: ApprovalStore
 	readonly approvalGate: StoreBackedApprovalGate
+	readonly tenancyStore: TenancyStore
 }
 
 let cached: Runtime | null = null
@@ -258,5 +264,6 @@ function build(): Runtime {
 		agentStore,
 		approvalStore,
 		approvalGate,
+		tenancyStore: sql ? new PostgresTenancyStore(sql) : new InMemoryTenancyStore(),
 	}
 }

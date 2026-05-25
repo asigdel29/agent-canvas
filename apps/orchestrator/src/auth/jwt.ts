@@ -21,7 +21,16 @@ export interface SessionClaims {
 	readonly sub: string
 	readonly iat: number
 	readonly exp: number
-	readonly sid: string
+	/** Session id — opaque, kept for legacy callers. */
+	readonly sid?: string
+	/**
+	 * The workspace this session is currently scoped to. Carried in
+	 * the JWT so every workspace-scoped route can authorize without
+	 * an extra DB lookup. Set by the GitHub OAuth callback; the
+	 * workspace switcher (P1, follow-up) re-mints the JWT with a
+	 * different workspace_id when the user picks another one.
+	 */
+	readonly workspace_id?: string
 }
 
 export class JwtVerificationError extends Error {
