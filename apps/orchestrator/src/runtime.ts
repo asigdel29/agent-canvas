@@ -45,6 +45,11 @@ import {
 	PostgresWebhookEndpointStore,
 } from './webhooks/webhookEndpointStore.js'
 import {
+	type WorkspaceAuditStore,
+	InMemoryWorkspaceAuditStore,
+	PostgresWorkspaceAuditStore,
+} from './audit/workspaceAuditStore.js'
+import {
 	type ApprovalStore,
 	InMemoryApprovalStore,
 	PostgresApprovalStore,
@@ -127,6 +132,7 @@ export interface Runtime {
 	readonly apiTokenStore: ApiTokenStore
 	readonly rateLimitStore: RateLimitStore
 	readonly webhookEndpointStore: WebhookEndpointStore
+	readonly workspaceAuditStore: WorkspaceAuditStore
 }
 
 let cached: Runtime | null = null
@@ -311,5 +317,8 @@ function build(): Runtime {
 		webhookEndpointStore: sql
 			? new PostgresWebhookEndpointStore(sql)
 			: new InMemoryWebhookEndpointStore(),
+		workspaceAuditStore: sql
+			? new PostgresWorkspaceAuditStore(sql)
+			: new InMemoryWorkspaceAuditStore(),
 	}
 }
