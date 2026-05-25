@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { track } from '../analytics/posthog.js'
 
 export interface LoginProps {
 	readonly orchestratorUrl: string
@@ -43,6 +44,7 @@ export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 
 	function handleSignIn() {
 		setLoading(true)
+		track('login_started', { provider: 'github' })
 		const url = new URL(`${orchestratorUrl}/api/auth/login/github`)
 		url.searchParams.set('redirect_to', window.location.origin + '/')
 		window.location.href = url.toString()

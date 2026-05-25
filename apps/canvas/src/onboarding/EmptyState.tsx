@@ -1,14 +1,18 @@
 /**
  * EmptyState — first-run pane shown inside the canvas area when the
- * workspace has no connectors yet. Centered card, not a full-screen
- * takeover: the rails stay visible so the user understands the
- * shell while choosing a starter.
+ * workspace has no agents or connectors. Centered card, not a
+ * full-screen takeover: the rails stay visible so the user
+ * understands the shell while choosing a starter.
  *
- * Visual model: Framer-style card, hairline border, no shadow, eight
- * pixel radius. Four equal-width tiles in a 2x2 grid; each tile is a
- * pure white surface with a hairline border that turns accent-blue
- * on hover.
+ * Three layout modes selected from props:
+ *   1. With onPickStarter: starter agent gallery up top, then the
+ *      'Create your first agent' CTA, then connector tiles. This
+ *      is the post-DX-review layout — pick a template and go.
+ *   2. With onCreateAgent only: CTA up top, then connector tiles.
+ *   3. Neither: original connector-tiles-only layout (back-compat).
  */
+
+import { STARTERS, type Starter } from '../agent/starterAgents.js'
 
 export type StarterProvider = 'github' | 'linear' | 'slack' | 'vercel'
 
@@ -22,6 +26,13 @@ export interface EmptyStateProps {
 	 * empty state falls back to its original tiles-only layout.
 	 */
 	readonly onCreateAgent?: () => void
+	/**
+	 * When supplied, the empty state shows a row of starter tiles
+	 * above the create-agent CTA. Each tile is one of the predefined
+	 * `STARTERS`; clicking a tile opens the New Agent modal pre-
+	 * filled with that starter's draft.
+	 */
+	readonly onPickStarter?: (starter: Starter) => void
 }
 
 const TILES: { id: StarterProvider; label: string; tagline: string }[] = [
@@ -31,7 +42,11 @@ const TILES: { id: StarterProvider; label: string; tagline: string }[] = [
 	{ id: 'vercel', label: 'Vercel', tagline: 'Deploys and previews' },
 ]
 
-export function EmptyState({ onConnect, onCreateAgent }: EmptyStateProps) {
+export function EmptyState({
+	onConnect,
+	onCreateAgent,
+	onPickStarter,
+}: EmptyStateProps) {
 	const headline = onCreateAgent ? 'Drop your first agent' : 'Connect a tool to start'
 	const sub = onCreateAgent
 		? 'An agent is a Claude-driven worker that you wire to MCP servers, a browser, or a sandboxed desktop.'
@@ -83,11 +98,35 @@ export function EmptyState({ onConnect, onCreateAgent }: EmptyStateProps) {
 				</header>
 
 				{/*
-				 * Primary CTA: create an agent directly. Previously the
-				 * EmptyState only offered connector tiles, leaving users
-				 * who didn't have webhook secrets in a dead end. With
-				 * onCreateAgent supplied, this becomes the primary path
-				 * and the connector tiles drop to a secondary row.
+				 * Starter gallery — three pre-canned agent templates.
+				 * Clicking one opens NewAgentModal pre-filled. The
+				 * intent: most tinkerers don't know what an agent
+				 * "should" look like; cloning a known-good template
+				 * gets them past the blank-page problem.
+				 */}
+				{onPickStarter && (
+					<div
+						style={{
+							display: 'grid',
+							gridTemplateColumns: 'repeat(3, 1fr)',
+							gap: 'var(--space-2)',
+							width: '100%',
+						}}
+					>
+						{STARTERS.map((starter) => (
+							<StarterTile
+								key={starter.id}
+								starter={starter}
+								onClick={() => onPickStarter(starter)}
+							/>
+						))}
+					</div>
+				)}
+
+				{/*
+				 * Primary CTA: create an agent directly (blank form).
+				 * Sits below the starter tiles so the gallery is the
+				 * first thing the user sees.
 				 */}
 				{onCreateAgent && (
 					<button
@@ -112,7 +151,7 @@ export function EmptyState({ onConnect, onCreateAgent }: EmptyStateProps) {
 							cursor: 'pointer',
 						}}
 					>
-						+ Create your first agent
+						{onPickStarter ? '+ Or start from blank' : '+ Create your first agent'}
 					</button>
 				)}
 
@@ -192,6 +231,62 @@ function Tile({
 		>
 			<span style={{ fontSize: 'var(--font-14)', fontWeight: 500 }}>{label}</span>
 			<span style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{tagline}</span>
+		</button>
+	)
+}
+
+/**
+ * StarterTile — one entry in the starter agent gallery row.
+ * Visual model matches the connector tiles below but uses an
+ * emoji icon up top so a tinkerer can pattern-match what each
+ * starter does in under a second.
+ */
+function StarterTile({
+	starter,
+	onClick,
+}: {
+	starter: Starter
+	onClick: () => void
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			data-starter={starter.id}
+			style={{
+				display: 'grid',
+				gap: 4,
+				justifyItems: 'flex-start',
+				textAlign: 'left',
+				padding: 'var(--space-3)',
+				background: 'var(--surface-elev)',
+				border: '1px solid var(--border)',
+				borderRadius: 'var(--radius-lg)',
+				color: 'var(--text-strong)',
+				font: 'inherit',
+				fontFamily: 'var(--font-ui)',
+				cursor: 'pointer',
+				transition:
+					'border-color var(--motion-chip) var(--ease-default), background var(--motion-chip) var(--ease-default)',
+			}}
+			onMouseEnter={(e) => {
+				e.currentTarget.style.borderColor = 'var(--accent)'
+				e.currentTarget.style.background = 'var(--accent-soft)'
+			}}
+			onMouseLeave={(e) => {
+				e.currentTarget.style.borderColor = 'var(--border)'
+				e.currentTarget.style.background = 'var(--surface-elev)'
+			}}
+		>
+			<span style={{ fontSize: 20, lineHeight: 1 }} aria-hidden="true">
+				{starter.icon}
+			</span>
+			<span style={{ fontSize: 'var(--font-13)', fontWeight: 500 }}>
+				{starter.label}
+			</span>
+			<span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+				{starter.tagline}
+			</span>
 		</button>
 	)
 }
