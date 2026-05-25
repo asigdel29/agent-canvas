@@ -35,6 +35,11 @@ import {
 	PostgresApiTokenStore,
 } from './tokens/apiTokenStore.js'
 import {
+	type RateLimitStore,
+	InMemoryRateLimitStore,
+	tryCreateUpstashRateLimitStore,
+} from './rateLimit/rateLimitStore.js'
+import {
 	type ApprovalStore,
 	InMemoryApprovalStore,
 	PostgresApprovalStore,
@@ -115,6 +120,7 @@ export interface Runtime {
 	readonly approvalGate: StoreBackedApprovalGate
 	readonly tenancyStore: TenancyStore
 	readonly apiTokenStore: ApiTokenStore
+	readonly rateLimitStore: RateLimitStore
 }
 
 let cached: Runtime | null = null
@@ -140,6 +146,10 @@ function build(): Runtime {
 		has_e2b_env: !!process.env['E2B_API_KEY'],
 		has_sentry: !!process.env['SENTRY_DSN'],
 		has_upstash: !!process.env['UPSTASH_REDIS_REST_URL'],
+		// Rate limit accuracy follows Upstash; this is the same flag
+		// surfaced under a sharper name so log aggregators can alert
+		// on "rate limiting effectively off".
+		has_rate_limit_redis: !!process.env['UPSTASH_REDIS_REST_URL'],
 	})
 
 	const usePg = !!process.env['DATABASE_URL']
@@ -285,5 +295,12 @@ function build(): Runtime {
 		approvalGate,
 		tenancyStore: sql ? new PostgresTenancyStore(sql) : new InMemoryTenancyStore(),
 		apiTokenStore: sql ? new PostgresApiTokenStore(sql) : new InMemoryApiTokenStore(),
+		// Upstash is required for accurate cross-instance rate limiting
+		// in production. The in-memory fallback is per-process; under
+		// Vercel's auto-scaling every cold container starts with empty
+		// buckets, which means the effective ceiling is "limit *
+		// instance_count" rather than "limit per user". Same warn line
+		// as the SSE nonce store covers both cases.
+		rateLimitStore: tryCreateUpstashRateLimitStore() ?? new InMemoryRateLimitStore(),
 	}
 }

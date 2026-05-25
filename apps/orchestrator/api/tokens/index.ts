@@ -11,6 +11,7 @@ import { getRuntime } from '../../dist/index.js'
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import type { ApiTokenScope } from '../../dist/tokens/apiTokenStore.js'
+import { withRateLimit } from '../../dist/rateLimit/withRateLimit.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import type { WorkspaceId } from '../../dist/tenancy/tenancyTypes.js'
 
@@ -26,10 +27,12 @@ export default async function handler(req: Request): Promise<Response> {
 	const runtime = getRuntime() as unknown as {
 		apiTokenStore?: import('../../dist/tokens/apiTokenStore.js').ApiTokenStore
 		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
+		rateLimitStore?: import('../../dist/rateLimit/rateLimitStore.js').RateLimitStore
 	}
 	const store = runtime.apiTokenStore
 	const tenancy = runtime.tenancyStore
-	if (!store || !tenancy) {
+	const rateLimit = runtime.rateLimitStore
+	if (!store || !tenancy || !rateLimit) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -46,7 +49,9 @@ export default async function handler(req: Request): Promise<Response> {
 		)
 	}
 
-	if (req.method === 'POST') {
+	// Arrow form (not declaration) so the narrowing of store / tenancy
+	// / rateLimit survives into the closure.
+	const mintToken = async (): Promise<Response> => {
 		let body: { name?: string; scope?: ApiTokenScope; expires_at?: string | null; workspace_id?: string }
 		try {
 			body = (await req.json()) as typeof body
@@ -78,8 +83,8 @@ export default async function handler(req: Request): Promise<Response> {
 			const minRole = scope === 'write' ? 'member' : 'viewer'
 			await tenancy.requireMembership(user_id, workspace_id, minRole)
 		} catch (err) {
-			const name = err instanceof Error ? err.name : ''
-			if (name === 'TenancyForbiddenError') {
+			const errName = err instanceof Error ? err.name : ''
+			if (errName === 'TenancyForbiddenError') {
 				return withCorsHeaders(req, jsonError(403, 'workspace_forbidden'))
 			}
 			throw err
@@ -100,6 +105,28 @@ export default async function handler(req: Request): Promise<Response> {
 				status: 201,
 				headers: { 'content-type': 'application/json' },
 			})
+		)
+	}
+
+	if (req.method === 'POST') {
+		// Rate limit token minting tightly. Five mints per minute is
+		// generous for human flows (operator rotates a leaked key,
+		// CI cuts a new build token) and tight enough to stop a
+		// runaway script. The bucket key is the session user_id so a
+		// single account cannot exceed the ceiling even with multiple
+		// browsers open.
+		return withRateLimit(
+			{
+				store: rateLimit,
+				key: `mint-token:${user_id}`,
+				limit: 5,
+				windowSec: 60,
+				blockedBody: () => ({
+					error: 'rate_limited',
+					detail: 'too many tokens minted in the last minute',
+				}),
+			},
+			mintToken
 		)
 	}
 

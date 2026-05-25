@@ -13,10 +13,12 @@
  * dev-server router simple and the request body already carries
  * agent_id. The semantic mapping is the same.
  *
- * Production hardening still missing (P1):
- *   - BillingGate check before spending tokens
- *   - Per-workspace membership check
- *   - Rate limit per agent
+ * Production hardening still missing:
+ *   - BillingGate check before spending tokens (P8 will add this)
+ *
+ * Hardened in earlier tiers:
+ *   - Per-workspace membership check (P1)
+ *   - Rate limit per user (P5; 30 starts/min)
  */
 
 import type { RoomId } from '@agent-canvas/orchestrator-types'
@@ -24,6 +26,7 @@ import type { RoomId } from '@agent-canvas/orchestrator-types'
 import { getRuntime } from '../../dist/index.js'
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
+import { withRateLimit } from '../../dist/rateLimit/withRateLimit.js'
 import type { AgentId } from '../../dist/agents/agentRecord.js'
 import { AnthropicClient } from '../../dist/agents/anthropicClient.js'
 import { buildBrowserContribution } from '../../dist/agents/providers/browserProvider.js'
@@ -55,13 +58,23 @@ export default async function handler(req: Request): Promise<Response> {
 		agentStore?: import('../../dist/agents/agentStore.js').AgentStore
 		approvalGate?: import('../../dist/agents/storeBackedApprovalGate.js').StoreBackedApprovalGate
 		roomEventBus?: import('../../dist/sync/roomEventBus.js').RoomEventBus
+		rateLimitStore?: import('../../dist/rateLimit/rateLimitStore.js').RateLimitStore
 	}
 	const agentStore = runtime.agentStore
 	const approvalGate = runtime.approvalGate
 	const bus = runtime.roomEventBus
-	if (!agentStore || !approvalGate || !bus) {
+	const rateLimit = runtime.rateLimitStore
+	if (!agentStore || !approvalGate || !bus || !rateLimit) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
+
+	// Rate limit run starts at 30/min per user. A Claude run can spend
+	// real money on every iteration; 30/min keeps a runaway client
+	// loop from draining the workspace budget before billing catches
+	// up (P8). Reads against /api/agents/runs/:id are not limited.
+	// Arrow form (not function declaration) so the narrowing of
+	// agentStore / approvalGate / bus survives into the closure.
+	const startRun = async (): Promise<Response> => {
 
 	// Resolve the Anthropic key. Per-request header takes precedence
 	// (Bring-Your-Own-Key path from the canvas Settings drawer); fall
@@ -246,6 +259,21 @@ export default async function handler(req: Request): Promise<Response> {
 			status: 202,
 			headers: { 'content-type': 'application/json' },
 		})
+	)
+	}
+
+	return withRateLimit(
+		{
+			store: rateLimit,
+			key: `start-run:${session.sub}`,
+			limit: 30,
+			windowSec: 60,
+			blockedBody: () => ({
+				error: 'rate_limited',
+				detail: 'too many run starts in the last minute',
+			}),
+		},
+		startRun
 	)
 }
 
