@@ -39,6 +39,8 @@ import { ErrorToast, type ErrorCard } from './errors/ErrorToast.js'
 import { SettingsDrawer } from './settings/SettingsDrawer.js'
 import { FeedbackModal } from './feedback/FeedbackModal.js'
 import { track } from './analytics/posthog.js'
+import { LegalPage } from './legal/LegalPage.js'
+import { TERMS_OF_SERVICE, PRIVACY_POLICY } from './legal/legalContent.js'
 import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
@@ -555,6 +557,17 @@ export function App() {
 			isLive: s.isLive,
 		}))
 	}, [liveEvents])
+
+	// Path-level routing. The canvas is otherwise a SPA at /, but
+	// /tos and /privacy render standalone legal pages so a crawler
+	// or a 'view the terms' deep link lands somewhere readable.
+	const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
+	if (pathname === '/tos') {
+		return <LegalPage title="Terms of Service" markdown={TERMS_OF_SERVICE} />
+	}
+	if (pathname === '/privacy') {
+		return <LegalPage title="Privacy Policy" markdown={PRIVACY_POLICY} />
+	}
 
 	// Routing.
 	if (!realtime) {
