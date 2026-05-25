@@ -23,11 +23,13 @@
  * Orchestrator base URL: VITE_ORCHESTRATOR_URL.
  */
 
-import { useEffect, useMemo, useState } from 'react'
-import { Tldraw } from 'tldraw'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Tldraw, type Editor } from 'tldraw'
 import 'tldraw/tldraw.css'
 
 import { AgentShapeUtil } from './agent/AgentShapeUtil.js'
+import { AgentApi, type AgentApiRecord, AgentApiError } from './agent/agentApi.js'
+import { agentShapeId, recordToShapeProps } from './agent/agentToShape.js'
 import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
@@ -148,7 +150,9 @@ export function App() {
 	const [density, setDensity] = useState<'compact' | 'full'>('full')
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
-	const [pendingAgents, setPendingAgents] = useState<readonly NewAgentDraft[]>([])
+	const [agents, setAgents] = useState<readonly AgentApiRecord[]>([])
+	const [agentError, setAgentError] = useState<string | null>(null)
+	const editorRef = useRef<Editor | null>(null)
 
 	const realtime = useMemo(() => intakeAndStashCredentials(), [])
 	const [onboarded, setOnboarded] = useState<boolean>(readOnboardedFlag)
@@ -212,21 +216,83 @@ export function App() {
 		])
 	}
 
-	function handleCreateAgent(draft: NewAgentDraft) {
-		setPendingAgents((prev) => [...prev, draft])
-		setAgentModalOpen(false)
-		// TODO: drop an AgentShape on the canvas via the tldraw editor
-		// once the editor instance is held in a ref. For this PR the
-		// modal closes and the agent appears in the LeftRail "Workflows"
-		// section so the user has feedback that creation worked.
+	const agentApi = useMemo(() => {
+		if (!realtime) return null
+		return new AgentApi({
+			baseUrl: ORCHESTRATOR_URL,
+			session: realtime.session,
+			workspaceId: realtime.room, // current proxy for workspace id; real ws ids land with users table
+		})
+	}, [realtime])
+
+	// Initial load — fetch agents for this workspace once the session
+	// is in place. Errors land in agentError for the toast banner.
+	useEffect(() => {
+		if (!agentApi || !onboarded) return
+		let cancelled = false
+		void (async () => {
+			try {
+				const items = await agentApi.list()
+				if (!cancelled) setAgents(items)
+			} catch (err) {
+				if (cancelled) return
+				const msg = err instanceof AgentApiError ? err.message : 'Failed to load agents'
+				setAgentError(msg)
+			}
+		})()
+		return () => {
+			cancelled = true
+		}
+	}, [agentApi, onboarded])
+
+	// When the tldraw editor mounts AND we have records, paint them on
+	// the canvas. Subsequent record additions go through createAgent.
+	const ensureShapesForRecords = useCallback(
+		(editor: Editor, records: readonly AgentApiRecord[], roomId: string) => {
+			for (const [i, record] of records.entries()) {
+				const shapeId = agentShapeId(record.id)
+				const existing = editor.getShape(shapeId as never)
+				if (existing) continue
+				// Lay out new shapes on a soft grid so they don't overlap.
+				const col = i % 3
+				const row = Math.floor(i / 3)
+				editor.createShape({
+					id: shapeId as never,
+					type: 'agent',
+					x: 80 + col * 360,
+					y: 80 + row * 180,
+					props: recordToShapeProps(record, roomId),
+				})
+			}
+		},
+		[]
+	)
+
+	useEffect(() => {
+		if (!editorRef.current || !realtime) return
+		ensureShapesForRecords(editorRef.current, agents, realtime.room)
+	}, [agents, realtime, ensureShapesForRecords])
+
+	async function handleCreateAgent(draft: NewAgentDraft) {
+		if (!agentApi) return
+		setAgentError(null)
+		try {
+			const created = await agentApi.create(draft)
+			setAgents((prev) => [created, ...prev])
+			setAgentModalOpen(false)
+			// editor effect will pick up the new record on the next paint
+		} catch (err) {
+			const msg = err instanceof AgentApiError ? err.message : 'Failed to create agent'
+			setAgentError(msg)
+		}
 	}
 
 	const workflowItems: readonly RailItem[] = useMemo(
 		() => [
-			...pendingAgents.map((a, i) => ({
-				id: `agent:${i}`,
+			...agents.map((a) => ({
+				id: a.id,
 				label: a.name,
-				sublabel: capsOneLine(a),
+				sublabel: capsLineFromRecord(a),
 			})),
 			...connectors.map((c) => ({
 				id: `wf:${c.id}`,
@@ -234,7 +300,7 @@ export function App() {
 				sublabel: 'no runs yet',
 			})),
 		],
-		[pendingAgents, connectors]
+		[agents, connectors]
 	)
 
 	const runItems: readonly RailItem[] = useMemo(() => {
@@ -269,7 +335,7 @@ export function App() {
 	}
 
 	const hasAnyConnector = connectors.length > 0
-	const hasAnyAgent = pendingAgents.length > 0
+	const hasAnyAgent = agents.length > 0
 	const showEmptyState = !hasAnyConnector && !hasAnyAgent
 
 	const rightRailMode: RightRailMode = selectedRunId
@@ -359,9 +425,51 @@ export function App() {
 				{showEmptyState ? (
 					<EmptyState onConnect={handleConnect} />
 				) : (
-					<Tldraw shapeUtils={SHAPE_UTILS} />
+					<Tldraw
+						shapeUtils={SHAPE_UTILS}
+						onMount={(editor) => {
+							editorRef.current = editor
+							if (realtime) {
+								ensureShapesForRecords(editor, agents, realtime.room)
+							}
+						}}
+					/>
 				)}
 			</Shell>
+			{agentError && (
+				<aside
+					role="alert"
+					style={{
+						position: 'fixed',
+						bottom: 'var(--space-3)',
+						left: 'var(--space-3)',
+						padding: 'var(--space-2) var(--space-3)',
+						background: 'var(--live-soft)',
+						border: '1px solid var(--live)',
+						borderRadius: 'var(--radius-md)',
+						fontSize: 'var(--font-12)',
+						color: 'var(--text-strong)',
+						zIndex: 'var(--z-floating)',
+						boxShadow: 'var(--shadow-floating)',
+						maxWidth: 420,
+					}}
+				>
+					<strong>{agentError}</strong>
+					<button
+						type="button"
+						onClick={() => setAgentError(null)}
+						style={{
+							marginLeft: 'var(--space-2)',
+							background: 'transparent',
+							border: 'none',
+							color: 'var(--text-muted)',
+							cursor: 'pointer',
+						}}
+					>
+						×
+					</button>
+				</aside>
+			)}
 
 			<NewAgentModal
 				open={agentModalOpen}
@@ -372,11 +480,12 @@ export function App() {
 	)
 }
 
-function capsOneLine(a: NewAgentDraft): string {
+function capsLineFromRecord(a: AgentApiRecord): string {
+	const c = a.capabilities
 	const bits: string[] = []
-	if (a.capabilities.computer_use.enabled) bits.push('computer')
-	if (a.capabilities.browser_use.enabled) bits.push('browser')
-	if (a.capabilities.mcp_servers.length > 0) bits.push(`${a.capabilities.mcp_servers.length} MCP`)
+	if (c.computer_use.enabled) bits.push('computer')
+	if (c.browser_use.enabled) bits.push('browser')
+	if (c.mcp_servers.length > 0) bits.push(`${c.mcp_servers.length} MCP`)
 	return bits.length > 0 ? bits.join(' · ') : a.purpose || 'no capabilities'
 }
 
