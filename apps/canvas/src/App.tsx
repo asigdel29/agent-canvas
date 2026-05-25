@@ -35,6 +35,8 @@ import {
 	type PendingApprovalDto,
 } from './agent/agentApi.js'
 import { agentShapeId, recordToShapeProps } from './agent/agentToShape.js'
+import { ErrorToast, type ErrorCard } from './errors/ErrorToast.js'
+import { SettingsDrawer } from './settings/SettingsDrawer.js'
 import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
@@ -153,11 +155,20 @@ export function App() {
 	const [zoomPercent] = useState<number>(100)
 	const [density, setDensity] = useState<'compact' | 'full'>('full')
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+	const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
 	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
 	const [agents, setAgents] = useState<readonly AgentApiRecord[]>([])
-	const [agentError, setAgentError] = useState<string | null>(null)
+	const [errorCards, setErrorCards] = useState<readonly ErrorCard[]>([])
 	const [liveApprovals, setLiveApprovals] = useState<readonly PendingApprovalDto[]>([])
 	const editorRef = useRef<Editor | null>(null)
+
+	const pushError = useCallback((card: Omit<ErrorCard, 'id'>) => {
+		const id = `e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+		setErrorCards((prev) => [...prev, { ...card, id }])
+	}, [])
+	const dismissError = useCallback((id: string) => {
+		setErrorCards((prev) => prev.filter((c) => c.id !== id))
+	}, [])
 
 	const realtime = useMemo(() => intakeAndStashCredentials(), [])
 	const [onboarded, setOnboarded] = useState<boolean>(readOnboardedFlag)
@@ -219,7 +230,7 @@ export function App() {
 	}, [realtime])
 
 	// Initial load — fetch agents for this workspace once the session
-	// is in place. Errors land in agentError for the toast banner.
+	// is in place. Errors land as structured toast cards.
 	useEffect(() => {
 		if (!agentApi || !onboarded) return
 		let cancelled = false
@@ -229,8 +240,7 @@ export function App() {
 				if (!cancelled) setAgents(items)
 			} catch (err) {
 				if (cancelled) return
-				const msg = err instanceof AgentApiError ? err.message : 'Failed to load agents'
-				setAgentError(msg)
+				pushError(toErrorCard(err, 'list agents', () => setSettingsOpen(true)))
 			}
 		})()
 		return () => {
@@ -292,17 +302,54 @@ export function App() {
 		}
 	}, [liveEvents])
 
+	/**
+	 * Forward orchestrator-side warnings published on the SSE bus
+	 * into the error toast queue. Previously these events landed in
+	 * liveEvents and were never surfaced.
+	 *
+	 * Three kinds today:
+	 *   computer_use_unavailable  agent enabled computer_use but
+	 *                             E2B_API_KEY isn't configured
+	 *   mcp_connect_failed        one of the MCP servers refused
+	 *                             the connection at run start
+	 *   webhook_signature_failed  inbound webhook arrived with a
+	 *                             bad signature (probably a misconfig)
+	 *
+	 * The handler reads the last few events and dedupes by event
+	 * payload so a single bad config doesn't pile up dozens of toasts.
+	 */
+	useEffect(() => {
+		const recentBackendWarnings = liveEvents.slice(-20).filter((e) =>
+			e.kind === 'computer_use_unavailable' ||
+			e.kind === 'mcp_connect_failed' ||
+			e.kind === 'webhook_signature_failed'
+		)
+		if (recentBackendWarnings.length === 0) return
+		const seenKey = (e: RunEventPayload): string =>
+			`${e.kind}:${(e.payload as { server_id?: string }).server_id ?? ''}`
+		const newCards: ErrorCard[] = []
+		const known = new Set(errorCards.map((c) => c.id))
+		for (const e of recentBackendWarnings) {
+			const id = seenKey(e)
+			if (known.has(id)) continue
+			known.add(id)
+			newCards.push(translateBackendEvent(e, id))
+		}
+		if (newCards.length > 0) {
+			setErrorCards((prev) => [...prev, ...newCards])
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [liveEvents])
+
 	async function handleCreateAgent(draft: NewAgentDraft) {
 		if (!agentApi) return
-		setAgentError(null)
 		try {
 			const created = await agentApi.create(draft)
 			setAgents((prev) => [created, ...prev])
 			setAgentModalOpen(false)
 			// editor effect will pick up the new record on the next paint
 		} catch (err) {
-			const msg = err instanceof AgentApiError ? err.message : 'Failed to create agent'
-			setAgentError(msg)
+			pushError(toErrorCard(err, 'create agent', () => setSettingsOpen(true)))
 		}
 	}
 
@@ -313,12 +360,10 @@ export function App() {
 	 */
 	async function handleRunAgent(agentId: string, initialMessage: string) {
 		if (!agentApi) return
-		setAgentError(null)
 		try {
 			await agentApi.startRun({ agent_id: agentId, initial_message: initialMessage })
 		} catch (err) {
-			const msg = err instanceof AgentApiError ? err.message : 'Failed to start run'
-			setAgentError(msg)
+			pushError(toErrorCard(err, 'start run', () => setSettingsOpen(true)))
 		}
 	}
 
@@ -374,9 +419,7 @@ export function App() {
 			await agentApi.resolveApproval(approvalId, resolution)
 			setLiveApprovals((prev) => prev.filter((a) => a.id !== approvalId))
 		} catch (err) {
-			const msg =
-				err instanceof AgentApiError ? err.message : 'Failed to resolve approval'
-			setAgentError(msg)
+			pushError(toErrorCard(err, 'resolve approval', () => setSettingsOpen(true)))
 		}
 	}
 
@@ -450,11 +493,13 @@ export function App() {
 	const hasAnyAgent = agents.length > 0
 	const showEmptyState = !hasAnyConnector && !hasAnyAgent
 
-	const rightRailMode: RightRailMode = selectedRunId
-		? 'inspector'
-		: liveEvents.length > 0 || liveApprovals.length > 0
-			? 'activity'
-			: 'empty'
+	const rightRailMode: RightRailMode = settingsOpen
+		? 'settings'
+		: selectedRunId
+			? 'inspector'
+			: liveEvents.length > 0 || liveApprovals.length > 0
+				? 'activity'
+				: 'empty'
 
 	return (
 		<>
@@ -473,6 +518,7 @@ export function App() {
 						spend={
 							<SpendIndicator accrued_micros={3_420_000} ceiling_micros={50_000_000} />
 						}
+						onSettingsClick={() => setSettingsOpen((s) => !s)}
 					/>
 				}
 				leftRail={
@@ -513,16 +559,40 @@ export function App() {
 								onReject={(card) => handleResolveApproval(card.id, 'rejected')}
 							/>
 						}
+						settingsContent={
+							<SettingsDrawer
+								onClose={() => setSettingsOpen(false)}
+								onSave={() => {
+									// Dismiss the anthropic_not_configured warning if it
+									// was the active error; the next run will use the
+									// new key from the header.
+									setErrorCards((prev) =>
+										prev.filter(
+											(c) =>
+												!c.title.includes("couldn't") &&
+												!c.title.includes('disabled')
+										)
+									)
+								}}
+							/>
+						}
 					/>
 				}
 				overlays={
-					!showEmptyState ? (
-						<>
-							<FloatingToolbar
-								tools={TOOLS}
-								activeId={activeTool}
-								onSelect={setActiveTool}
-							/>
+					<>
+						{/*
+						 * FloatingToolbar always renders so the user can create
+						 * an agent from any state, including the empty canvas.
+						 * Before this change, an empty-state canvas hid the
+						 * toolbar, forcing users to first fake-click a
+						 * connector tile before they could find the Agent tool.
+						 */}
+						<FloatingToolbar
+							tools={TOOLS}
+							activeId={activeTool}
+							onSelect={setActiveTool}
+						/>
+						{!showEmptyState && (
 							<ZoomCluster
 								zoomPercent={zoomPercent}
 								density={density}
@@ -530,13 +600,16 @@ export function App() {
 									setDensity((d) => (d === 'compact' ? 'full' : 'compact'))
 								}
 							/>
-							{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
-						</>
-					) : null
+						)}
+						{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
+					</>
 				}
 			>
 				{showEmptyState ? (
-					<EmptyState onConnect={handleConnect} />
+					<EmptyState
+						onConnect={handleConnect}
+						onCreateAgent={() => setAgentModalOpen(true)}
+					/>
 				) : (
 					<Tldraw
 						shapeUtils={SHAPE_UTILS}
@@ -549,40 +622,7 @@ export function App() {
 					/>
 				)}
 			</Shell>
-			{agentError && (
-				<aside
-					role="alert"
-					style={{
-						position: 'fixed',
-						bottom: 'var(--space-3)',
-						left: 'var(--space-3)',
-						padding: 'var(--space-2) var(--space-3)',
-						background: 'var(--live-soft)',
-						border: '1px solid var(--live)',
-						borderRadius: 'var(--radius-md)',
-						fontSize: 'var(--font-12)',
-						color: 'var(--text-strong)',
-						zIndex: 'var(--z-floating)',
-						boxShadow: 'var(--shadow-floating)',
-						maxWidth: 420,
-					}}
-				>
-					<strong>{agentError}</strong>
-					<button
-						type="button"
-						onClick={() => setAgentError(null)}
-						style={{
-							marginLeft: 'var(--space-2)',
-							background: 'transparent',
-							border: 'none',
-							color: 'var(--text-muted)',
-							cursor: 'pointer',
-						}}
-					>
-						×
-					</button>
-				</aside>
-			)}
+			<ErrorToast cards={errorCards} onDismiss={dismissError} />
 
 			<NewAgentModal
 				open={agentModalOpen}
@@ -834,6 +874,101 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 			{children}
 		</div>
 	)
+}
+
+/**
+ * Convert an AgentApiError (or any other failure) into a structured
+ * ErrorCard with a problem, a cause, and a remediation hint based
+ * on the error code. New error codes from the orchestrator get a
+ * branch here; unknown ones fall through to a generic shape.
+ */
+function toErrorCard(
+	err: unknown,
+	what: string,
+	openSettings?: () => void
+): Omit<ErrorCard, 'id'> {
+	if (err instanceof AgentApiError) {
+		const code = err.code
+		// Errors with known remediation paths get their own copy.
+		if (code === 'anthropic_not_configured') {
+			return {
+				title: `The agent couldn't ${what}.`,
+				cause:
+					'No Claude API key is set. Paste yours in Settings (or set ANTHROPIC_API_KEY on the orchestrator).',
+				fix: openSettings ? { label: 'Open Settings', onClick: openSettings } : undefined,
+				docsUrl: 'https://console.anthropic.com/settings/keys',
+				severity: 'error',
+			}
+		}
+		if (code === 'jwt_secret_not_configured' || code === 'sse_token_secret_not_configured') {
+			return {
+				title: `The orchestrator is half-configured.`,
+				cause: `Required secret missing: ${code}.`,
+				docsUrl: 'https://github.com/asigdel29/agent-canvas#setup',
+				severity: 'error',
+			}
+		}
+		if (code === 'validation_failed') {
+			return {
+				title: `Could not ${what} — validation failed.`,
+				cause: err.detail ?? 'One of the fields was rejected by the orchestrator.',
+				severity: 'error',
+			}
+		}
+		return {
+			title: `Could not ${what}.`,
+			cause: err.detail ?? `Server returned ${err.status} ${err.code}.`,
+			severity: 'error',
+		}
+	}
+	const msg = err instanceof Error ? err.message : String(err)
+	return {
+		title: `Could not ${what}.`,
+		cause: msg,
+		severity: 'error',
+	}
+}
+
+/**
+ * Translate an orchestrator-side warning event into a toast card.
+ * Each kind has its own user-facing copy and remediation pointer.
+ */
+function translateBackendEvent(e: RunEventPayload, id: string): ErrorCard {
+	switch (e.kind) {
+		case 'computer_use_unavailable':
+			return {
+				id,
+				title: 'Computer-use is disabled.',
+				cause:
+					(e.payload as { reason?: string }).reason ??
+					'The orchestrator has no E2B_API_KEY set; the computer tool is not exposed to this agent.',
+				docsUrl: 'https://github.com/asigdel29/agent-canvas#setup',
+				severity: 'warn',
+			}
+		case 'mcp_connect_failed':
+			return {
+				id,
+				title: 'An MCP server failed to connect.',
+				cause: `${(e.payload as { server_id?: string }).server_id ?? 'A server'} returned: ${
+					(e.payload as { message?: string }).message ?? 'unknown error'
+				}. Other capabilities still work.`,
+				severity: 'warn',
+			}
+		case 'webhook_signature_failed':
+			return {
+				id,
+				title: 'A webhook arrived with a bad signature.',
+				cause: `Provider: ${(e.payload as { provider?: string }).provider ?? 'unknown'}. Check that the secret matches the sender.`,
+				severity: 'warn',
+			}
+		default:
+			return {
+				id,
+				title: 'Orchestrator warning.',
+				cause: e.kind,
+				severity: 'warn',
+			}
+	}
 }
 
 function providerLabel(p: StarterProvider): string {

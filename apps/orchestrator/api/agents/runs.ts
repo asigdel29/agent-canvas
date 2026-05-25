@@ -25,10 +25,12 @@ import { getRuntime } from '../../dist/index.js'
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import type { AgentId } from '../../dist/agents/agentRecord.js'
-import { tryCreateAnthropicClient } from '../../dist/agents/anthropicClient.js'
+import { AnthropicClient } from '../../dist/agents/anthropicClient.js'
 import { buildBrowserContribution } from '../../dist/agents/providers/browserProvider.js'
 import { buildComputerUseContribution } from '../../dist/agents/providers/computerUseProvider.js'
-import { tryCreateE2BLauncher } from '../../dist/agents/providers/computerUseSandbox.js'
+import {
+	E2BComputerUseSandbox,
+} from '../../dist/agents/providers/computerUseSandbox.js'
 import { buildMcpContribution } from '../../dist/agents/providers/mcpProvider.js'
 import {
 	BusRunEventSink,
@@ -61,17 +63,26 @@ export default async function handler(req: Request): Promise<Response> {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
-	const anthropic = tryCreateAnthropicClient()
-	if (!anthropic) {
+	// Resolve the Anthropic key. Per-request header takes precedence
+	// (Bring-Your-Own-Key path from the canvas Settings drawer); fall
+	// back to ANTHROPIC_API_KEY env if the header is absent (still
+	// useful for ops-controlled deployments). Without either, we 503
+	// with a remediation message the canvas's ErrorToast translates.
+	const anthropicKey =
+		req.headers.get('x-anthropic-api-key')?.trim() ||
+		process.env['ANTHROPIC_API_KEY'] ||
+		null
+	if (!anthropicKey) {
 		return withCorsHeaders(
 			req,
 			jsonError(
 				503,
 				'anthropic_not_configured',
-				'set ANTHROPIC_API_KEY to enable agent execution'
+				'Set your Claude API key in Settings, or set ANTHROPIC_API_KEY on the orchestrator.'
 			)
 		)
 	}
+	const anthropic = new AnthropicClient({ apiKey: anthropicKey })
 
 	let body: { agent_id?: string; room_id?: string; initial_message?: string }
 	try {
@@ -114,15 +125,23 @@ export default async function handler(req: Request): Promise<Response> {
 		agent_id: agent.id,
 	})
 
-	// Computer-use is gated on the agent flag AND a configured
-	// sandbox launcher. When the launcher is missing (no
-	// E2B_API_KEY), we publish a clear event and skip the
-	// contribution; the agent can still use MCP and browser-use.
+	// Computer-use is gated on the agent flag AND a resolved E2B key.
+	// Same BYOK preference as Anthropic: x-e2b-api-key header trumps
+	// the env. When the key is missing, the run still starts; the
+	// computer tool is just not exposed and a warn event lands on
+	// the room bus so the canvas can surface why.
+	const e2bKey =
+		req.headers.get('x-e2b-api-key')?.trim() ||
+		process.env['E2B_API_KEY'] ||
+		null
 	let screenshotSeq = 0
 	const e2bLauncher =
 		agent.capabilities.computer_use.enabled &&
-		agent.capabilities.computer_use.provider === 'e2b'
-			? tryCreateE2BLauncher()
+		agent.capabilities.computer_use.provider === 'e2b' &&
+		e2bKey
+			? {
+					create: () => E2BComputerUseSandbox.create({ apiKey: e2bKey }),
+				}
 			: null
 	if (agent.capabilities.computer_use.enabled && !e2bLauncher) {
 		bus.publish(room_id, {

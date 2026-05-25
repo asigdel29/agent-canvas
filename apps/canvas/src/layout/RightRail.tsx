@@ -17,13 +17,14 @@
 import type { ReactNode } from 'react'
 import type { RunEventPayload } from '../sync/RoomEventClient.js'
 
-export type RightRailMode = 'inspector' | 'activity' | 'empty'
+export type RightRailMode = 'inspector' | 'activity' | 'settings' | 'empty'
 
 export interface RightRailProps {
 	readonly mode: RightRailMode
 	readonly inspectorContent?: ReactNode
 	readonly activityEvents?: readonly RunEventPayload[]
 	readonly approvalsContent?: ReactNode
+	readonly settingsContent?: ReactNode
 }
 
 export function RightRail({
@@ -31,6 +32,7 @@ export function RightRail({
 	inspectorContent,
 	activityEvents = [],
 	approvalsContent,
+	settingsContent,
 }: RightRailProps) {
 	return (
 		<>
@@ -43,6 +45,7 @@ export function RightRail({
 						<ActivityFeed events={activityEvents} />
 					</>
 				)}
+				{mode === 'settings' && settingsContent}
 				{mode === 'empty' && <EmptyInspector />}
 			</div>
 		</>
@@ -50,7 +53,14 @@ export function RightRail({
 }
 
 function RailHeader({ mode }: { mode: RightRailMode }) {
-	const label = mode === 'inspector' ? 'Inspector' : mode === 'activity' ? 'Activity' : 'Inspector'
+	const label =
+		mode === 'inspector'
+			? 'Inspector'
+			: mode === 'activity'
+				? 'Activity'
+				: mode === 'settings'
+					? 'Settings'
+					: 'Inspector'
 	return (
 		<div
 			style={{

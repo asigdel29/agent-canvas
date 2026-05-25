@@ -143,7 +143,26 @@ export class AgentApi {
 	}
 
 	private authHeaders(): Record<string, string> {
-		return { authorization: `Bearer ${this.opts.session}` }
+		const out: Record<string, string> = {
+			authorization: `Bearer ${this.opts.session}`,
+		}
+		// Bring-Your-Own-Key passthrough. The orchestrator's runs.ts
+		// reads these and uses them instead of its own env vars.
+		// sessionStorage is the source of truth (see SettingsDrawer).
+		const anthropic = readBYOK('agent-canvas:anthropic_api_key')
+		const e2b = readBYOK('agent-canvas:e2b_api_key')
+		if (anthropic) out['x-anthropic-api-key'] = anthropic
+		if (e2b) out['x-e2b-api-key'] = e2b
+		return out
+	}
+}
+
+function readBYOK(key: string): string {
+	if (typeof window === 'undefined') return ''
+	try {
+		return (window.sessionStorage.getItem(key) ?? '').trim()
+	} catch {
+		return ''
 	}
 }
 

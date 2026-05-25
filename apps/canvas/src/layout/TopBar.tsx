@@ -27,6 +27,7 @@ export interface TopBarProps {
 	 */
 	readonly spend?: ReactNode | string | null
 	readonly onShareClick?: () => void
+	readonly onSettingsClick?: (() => void) | undefined
 }
 
 export function TopBar({
@@ -35,6 +36,7 @@ export function TopBar({
 	presenceAvatars = [],
 	spend = null,
 	onShareClick,
+	onSettingsClick,
 }: TopBarProps) {
 	return (
 		<div
@@ -80,6 +82,7 @@ export function TopBar({
 					typeof spend === 'string' ? <SpendPill text={spend} /> : spend
 				)}
 				{presenceAvatars.length > 0 && <PresenceStack avatars={presenceAvatars} />}
+				{onSettingsClick && <SettingsIconButton onClick={onSettingsClick} />}
 				<ShareButton onClick={onShareClick} />
 			</div>
 		</div>
@@ -179,6 +182,45 @@ function PresenceStack({ avatars }: { avatars: readonly { id: string; label: str
 				</span>
 			)}
 		</div>
+	)
+}
+
+function SettingsIconButton({ onClick }: { onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			aria-label="Settings"
+			title="Settings"
+			style={{
+				width: 28,
+				height: 28,
+				padding: 0,
+				display: 'inline-flex',
+				alignItems: 'center',
+				justifyContent: 'center',
+				background: 'transparent',
+				border: '1px solid var(--border)',
+				borderRadius: 'var(--radius-md)',
+				color: 'var(--text-strong)',
+				cursor: 'pointer',
+			}}
+		>
+			<svg
+				width="14"
+				height="14"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.5"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+				aria-hidden="true"
+			>
+				<circle cx="8" cy="8" r="2" />
+				<path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4" />
+			</svg>
+		</button>
 	)
 }
 
