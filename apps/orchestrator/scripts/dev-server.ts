@@ -63,6 +63,7 @@ import webhooksIndexHandler from '../api/webhooks/index.js'
 import webhookByIdHandler from '../api/webhooks/[id].js'
 import auditIndexHandler from '../api/audit/index.js'
 import stripeWebhookHandler from '../api/billing/stripe-webhook.js'
+import drainWebhooksHandler from '../api/admin/webhooks/drain.js'
 import approvalsIndexHandler from '../api/approvals/index.js'
 import approvalByIdHandler from '../api/approvals/[id].js'
 import syncHandler from '../api/sync/[room].js'
@@ -150,6 +151,9 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	}
 	if (pathname === '/api/billing/stripe-webhook' && (method === 'POST' || opts)) {
 		return stripeWebhookHandler
+	}
+	if (pathname === '/api/admin/webhooks/drain' && (method === 'POST' || opts)) {
+		return drainWebhooksHandler
 	}
 	// Outbound webhook management — list / register / revoke.
 	// Matched BEFORE the inbound /api/webhooks/:provider route so a

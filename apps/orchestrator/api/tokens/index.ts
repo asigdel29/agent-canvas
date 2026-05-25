@@ -12,6 +12,7 @@ import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import type { ApiTokenScope } from '../../dist/tokens/apiTokenStore.js'
 import { withRateLimit } from '../../dist/rateLimit/withRateLimit.js'
+import { dispatchWebhook } from '../../dist/webhooks/dispatchWebhook.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import type { WorkspaceId } from '../../dist/tenancy/tenancyTypes.js'
 
@@ -29,12 +30,23 @@ export default async function handler(req: Request): Promise<Response> {
 		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
 		rateLimitStore?: import('../../dist/rateLimit/rateLimitStore.js').RateLimitStore
 		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
+		webhookEndpointStore?: import('../../dist/webhooks/webhookEndpointStore.js').WebhookEndpointStore
+		webhookDeliveryStore?: import('../../dist/webhooks/webhookDeliveryStore.js').WebhookDeliveryStore
 	}
 	const store = runtime.apiTokenStore
 	const tenancy = runtime.tenancyStore
 	const rateLimit = runtime.rateLimitStore
 	const audit = runtime.workspaceAuditStore
-	if (!store || !tenancy || !rateLimit || !audit) {
+	const webhookEndpointStore = runtime.webhookEndpointStore
+	const webhookDeliveryStore = runtime.webhookDeliveryStore
+	if (
+		!store ||
+		!tenancy ||
+		!rateLimit ||
+		!audit ||
+		!webhookEndpointStore ||
+		!webhookDeliveryStore
+	) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -102,8 +114,12 @@ export default async function handler(req: Request): Promise<Response> {
 		// Append to the workspace audit trail. Best-effort: an audit
 		// write failure must not block the user's mint. Errors are
 		// swallowed; logging happens at the store level.
-		void audit
-			.append({
+		// We need the audit row id for the webhook event_id; await
+		// the append and use the returned record. If the audit write
+		// throws, fall back to a synthetic id so dispatch still fires.
+		let auditEventId: string
+		try {
+			const auditRow = await audit.append({
 				workspace_id,
 				actor_user_id: user_id,
 				action: 'token.minted',
@@ -115,7 +131,28 @@ export default async function handler(req: Request): Promise<Response> {
 					token_prefix: issued.record.token_prefix,
 				},
 			})
-			.catch(() => undefined)
+			auditEventId = auditRow.id
+		} catch {
+			auditEventId = `evt_local_${Date.now()}`
+		}
+		// Fire-and-forget webhook dispatch. Enqueue rows for every
+		// subscriber to 'token.minted' or '*'; the drain worker
+		// delivers them later. We deliberately do NOT await here —
+		// the response should not wait on the queue write.
+		void dispatchWebhook(
+			{ endpointStore: webhookEndpointStore, deliveryStore: webhookDeliveryStore },
+			{
+				workspace_id,
+				event_type: 'token.minted',
+				event_id: auditEventId,
+				payload: {
+					token_id: issued.record.id,
+					token_prefix: issued.record.token_prefix,
+					scope: issued.record.scope,
+					name: issued.record.name,
+				},
+			}
+		).catch(() => undefined)
 		// Return the raw token EXACTLY ONCE. Future GETs only show
 		// the hash-derived prefix.
 		return withCorsHeaders(
