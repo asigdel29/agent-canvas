@@ -266,6 +266,32 @@ export function App() {
 		ensureShapesForRecords(editorRef.current, agents, realtime.room)
 	}, [agents, realtime, ensureShapesForRecords])
 
+	// Forward computer_screenshot events from the SSE bus into the
+	// matching AgentShape's last_screenshot_data_uri prop. The shape
+	// renders the thumbnail on the next paint.
+	useEffect(() => {
+		const editor = editorRef.current
+		if (!editor) return
+		const latest = liveEvents.slice(-5).filter((e) => e.kind === 'computer_screenshot')
+		for (const e of latest) {
+			const agentId = (e.payload as { agent_id?: string }).agent_id
+			const dataUri = (e.payload as { data_uri?: string }).data_uri
+			if (!agentId || !dataUri) continue
+			const shapeId = agentShapeId(agentId)
+			const existing = editor.getShape(shapeId as never)
+			if (!existing) continue
+			editor.updateShape({
+				id: shapeId as never,
+				type: 'agent',
+				props: {
+					last_screenshot_data_uri: dataUri,
+					last_event_seq: e.seq,
+					last_event_at: e.ts,
+				},
+			})
+		}
+	}, [liveEvents])
+
 	async function handleCreateAgent(draft: NewAgentDraft) {
 		if (!agentApi) return
 		setAgentError(null)
