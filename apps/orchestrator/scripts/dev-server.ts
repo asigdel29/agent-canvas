@@ -55,6 +55,8 @@ import authGithubCallbackHandler from '../api/auth/github/callback.js'
 import agentsIndexHandler from '../api/agents/index.js'
 import agentByIdHandler from '../api/agents/[id].js'
 import agentRunsHandler from '../api/agents/runs.js'
+import agentProbeMcpHandler from '../api/agents/probe-mcp.js'
+import feedbackHandler from '../api/feedback.js'
 import approvalsIndexHandler from '../api/approvals/index.js'
 import approvalByIdHandler from '../api/approvals/[id].js'
 import syncHandler from '../api/sync/[room].js'
@@ -105,6 +107,12 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	}
 	if (pathname === '/api/agents/runs' && (method === 'POST' || opts)) {
 		return agentRunsHandler
+	}
+	if (pathname === '/api/agents/probe-mcp' && (method === 'POST' || opts)) {
+		return agentProbeMcpHandler
+	}
+	if (pathname === '/api/feedback' && (method === 'POST' || opts)) {
+		return feedbackHandler
 	}
 	if (
 		pathname.match(/^\/api\/agents\/[^/]+$/) &&
