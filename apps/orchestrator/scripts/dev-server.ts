@@ -62,6 +62,7 @@ import tokenByIdHandler from '../api/tokens/[id].js'
 import webhooksIndexHandler from '../api/webhooks/index.js'
 import webhookByIdHandler from '../api/webhooks/[id].js'
 import auditIndexHandler from '../api/audit/index.js'
+import stripeWebhookHandler from '../api/billing/stripe-webhook.js'
 import approvalsIndexHandler from '../api/approvals/index.js'
 import approvalByIdHandler from '../api/approvals/[id].js'
 import syncHandler from '../api/sync/[room].js'
@@ -146,6 +147,9 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	if (pathname.startsWith('/api/sync/') && (method === 'GET' || opts)) return syncHandler
 	if (pathname === '/api/audit' && (method === 'GET' || opts)) {
 		return auditIndexHandler
+	}
+	if (pathname === '/api/billing/stripe-webhook' && (method === 'POST' || opts)) {
+		return stripeWebhookHandler
 	}
 	// Outbound webhook management — list / register / revoke.
 	// Matched BEFORE the inbound /api/webhooks/:provider route so a
