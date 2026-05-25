@@ -150,4 +150,100 @@ describe('InMemoryTenancyStore', () => {
 		expect(await s.getWorkspace(ws.id)).toBeNull()
 		expect(await s.listWorkspacesForUser(u.id)).toHaveLength(0)
 	})
+
+	it('listMembers returns the joined user + membership, owner-first', async () => {
+		const s = new InMemoryTenancyStore()
+		const owner = await s.upsertGithubUser(GH('1'))
+		const admin = await s.upsertGithubUser(GH('2'))
+		const member = await s.upsertGithubUser(GH('3'))
+		const ws = await s.createWorkspace('A', owner.id)
+		await s.addMember(ws.id, admin.id, 'admin')
+		await s.addMember(ws.id, member.id, 'member')
+		const list = await s.listMembers(ws.id)
+		expect(list).toHaveLength(3)
+		expect(list[0]!.membership.role).toBe('owner')
+		expect(list[1]!.membership.role).toBe('admin')
+		expect(list[2]!.membership.role).toBe('member')
+		expect(list[0]!.user.id).toBe(owner.id)
+	})
+
+	it('setMemberRole updates the role and returns the new record', async () => {
+		const s = new InMemoryTenancyStore()
+		const owner = await s.upsertGithubUser(GH('1'))
+		const u2 = await s.upsertGithubUser(GH('2'))
+		const ws = await s.createWorkspace('A', owner.id)
+		await s.addMember(ws.id, u2.id, 'viewer')
+		const r = await s.setMemberRole(ws.id, u2.id, 'admin')
+		expect(r?.role).toBe('admin')
+	})
+
+	it('setMemberRole returns null for an unknown member', async () => {
+		const s = new InMemoryTenancyStore()
+		const owner = await s.upsertGithubUser(GH('1'))
+		const ws = await s.createWorkspace('A', owner.id)
+		const r = await s.setMemberRole(ws.id, 'gh:999' as UserId, 'admin')
+		expect(r).toBeNull()
+	})
+
+	it('setMemberRole refuses to demote the last owner', async () => {
+		const s = new InMemoryTenancyStore()
+		const owner = await s.upsertGithubUser(GH('1'))
+		const ws = await s.createWorkspace('A', owner.id)
+		await expect(s.setMemberRole(ws.id, owner.id, 'admin')).rejects.toBeInstanceOf(
+			TenancyForbiddenError
+		)
+	})
+
+	it('setMemberRole allows demoting an owner when a second owner exists', async () => {
+		const s = new InMemoryTenancyStore()
+		const a = await s.upsertGithubUser(GH('1'))
+		const b = await s.upsertGithubUser(GH('2'))
+		const ws = await s.createWorkspace('A', a.id)
+		await s.addMember(ws.id, b.id, 'owner')
+		const r = await s.setMemberRole(ws.id, a.id, 'admin')
+		expect(r?.role).toBe('admin')
+	})
+
+	it('removeMember deletes and returns the prior membership', async () => {
+		const s = new InMemoryTenancyStore()
+		const owner = await s.upsertGithubUser(GH('1'))
+		const u2 = await s.upsertGithubUser(GH('2'))
+		const ws = await s.createWorkspace('A', owner.id)
+		await s.addMember(ws.id, u2.id, 'member')
+		const prior = await s.removeMember(ws.id, u2.id)
+		expect(prior?.user_id).toBe(u2.id)
+		expect(await s.getMembership(u2.id, ws.id)).toBeNull()
+	})
+
+	it('removeMember refuses to remove the last owner', async () => {
+		const s = new InMemoryTenancyStore()
+		const owner = await s.upsertGithubUser(GH('1'))
+		const ws = await s.createWorkspace('A', owner.id)
+		await expect(s.removeMember(ws.id, owner.id)).rejects.toBeInstanceOf(
+			TenancyForbiddenError
+		)
+	})
+
+	it('findUserByGithubLogin is case-insensitive and exact-match', async () => {
+		const s = new InMemoryTenancyStore()
+		const u = await s.upsertGithubUser({
+			...GH('1'),
+			github_login: 'AliceCodes',
+		})
+		expect((await s.findUserByGithubLogin('alicecodes'))?.id).toBe(u.id)
+		expect((await s.findUserByGithubLogin('ALICECODES'))?.id).toBe(u.id)
+		expect(await s.findUserByGithubLogin('bob')).toBeNull()
+	})
+
+	it('findUserByGithubLogin trims whitespace', async () => {
+		const s = new InMemoryTenancyStore()
+		const u = await s.upsertGithubUser({
+			...GH('1'),
+			github_login: 'alice',
+		})
+		expect((await s.findUserByGithubLogin('  alice  '))?.id).toBe(u.id)
+	})
 })
+
+// Silence unused-import lint for the few helpers we still reference indirectly.
+void TenancyNotFoundError

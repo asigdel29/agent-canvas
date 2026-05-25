@@ -29,6 +29,7 @@ import type { SqlClient } from '../postgres/client.js'
 import {
 	type GitHubUserUpsert,
 	type MembershipRecord,
+	ROLE_RANK,
 	roleAtLeast,
 	type UserRecord,
 	type WorkspaceId,
@@ -66,6 +67,42 @@ export interface TenancyStore {
 	): Promise<MembershipRecord>
 
 	/**
+	 * List all live (non-archived) members of a workspace, joined with
+	 * the user record so the caller can render display name + github
+	 * login without a separate fetch.
+	 */
+	listMembers(workspace_id: WorkspaceId): Promise<readonly MemberListEntry[]>
+	/**
+	 * Change a member's role. Returns the updated record, or null when
+	 * the member doesn't exist in this workspace. Refuses to demote
+	 * the last remaining owner (throws TenancyForbiddenError); a
+	 * workspace must always have at least one owner.
+	 */
+	setMemberRole(
+		workspace_id: WorkspaceId,
+		user_id: UserId,
+		role: WorkspaceRole
+	): Promise<MembershipRecord | null>
+	/**
+	 * Remove a member. Returns the prior membership on success, null
+	 * on no-op. Refuses to remove the last owner (same rule as
+	 * setMemberRole demote).
+	 */
+	removeMember(
+		workspace_id: WorkspaceId,
+		user_id: UserId
+	): Promise<MembershipRecord | null>
+	/**
+	 * Resolve a github login to the local user_id for invites. Returns
+	 * null when no local user matches; the invite route surfaces a
+	 * 'user_not_found' so the caller knows to ask the invitee to sign
+	 * in first. (We do not pre-create user rows from a free-text
+	 * github handle; the OAuth callback is the only path that creates
+	 * user records, so claims stay verifiable.)
+	 */
+	findUserByGithubLogin(login: string): Promise<UserRecord | null>
+
+	/**
 	 * Throws TenancyForbiddenError when the user is not a member at
 	 * or above the required role. Used by every workspace-scoped
 	 * route to enforce membership in one line.
@@ -75,6 +112,11 @@ export interface TenancyStore {
 		workspace_id: WorkspaceId,
 		minRole: WorkspaceRole
 	): Promise<MembershipRecord>
+}
+
+export interface MemberListEntry {
+	readonly user: UserRecord
+	readonly membership: MembershipRecord
 }
 
 /* -------------------------------------------------------------- *
@@ -212,6 +254,72 @@ export class InMemoryTenancyStore implements TenancyStore {
 			throw new TenancyForbiddenError(user_id, workspace_id, minRole)
 		}
 		return m
+	}
+
+	async listMembers(workspace_id: WorkspaceId): Promise<readonly MemberListEntry[]> {
+		const out: MemberListEntry[] = []
+		for (const m of this.memberships.values()) {
+			if (m.workspace_id !== workspace_id) continue
+			const user = this.users.get(m.user_id)
+			if (!user) continue
+			out.push({ user, membership: m })
+		}
+		// owner first, then admin, then member, then viewer; tie-break by joined_at.
+		out.sort((a, b) => {
+			const diff = ROLE_RANK[b.membership.role] - ROLE_RANK[a.membership.role]
+			if (diff !== 0) return diff
+			return a.membership.joined_at < b.membership.joined_at ? -1 : 1
+		})
+		return out
+	}
+
+	async setMemberRole(
+		workspace_id: WorkspaceId,
+		user_id: UserId,
+		role: WorkspaceRole
+	): Promise<MembershipRecord | null> {
+		const existing = this.memberships.get(this.membershipKey(user_id, workspace_id))
+		if (!existing) return null
+		if (existing.role === 'owner' && role !== 'owner') {
+			// Demoting an owner — refuse if this is the last one.
+			let owners = 0
+			for (const m of this.memberships.values()) {
+				if (m.workspace_id === workspace_id && m.role === 'owner') owners += 1
+			}
+			if (owners <= 1) {
+				throw new TenancyForbiddenError(user_id, workspace_id, 'owner')
+			}
+		}
+		const next: MembershipRecord = { ...existing, role }
+		this.memberships.set(this.membershipKey(user_id, workspace_id), next)
+		return next
+	}
+
+	async removeMember(
+		workspace_id: WorkspaceId,
+		user_id: UserId
+	): Promise<MembershipRecord | null> {
+		const existing = this.memberships.get(this.membershipKey(user_id, workspace_id))
+		if (!existing) return null
+		if (existing.role === 'owner') {
+			let owners = 0
+			for (const m of this.memberships.values()) {
+				if (m.workspace_id === workspace_id && m.role === 'owner') owners += 1
+			}
+			if (owners <= 1) {
+				throw new TenancyForbiddenError(user_id, workspace_id, 'owner')
+			}
+		}
+		this.memberships.delete(this.membershipKey(user_id, workspace_id))
+		return existing
+	}
+
+	async findUserByGithubLogin(login: string): Promise<UserRecord | null> {
+		const trimmed = login.trim().toLowerCase()
+		for (const u of this.users.values()) {
+			if ((u.github_login ?? '').toLowerCase() === trimmed) return u
+		}
+		return null
 	}
 }
 
@@ -382,5 +490,110 @@ export class PostgresTenancyStore implements TenancyStore {
 			throw new TenancyForbiddenError(user_id, workspace_id, minRole)
 		}
 		return m
+	}
+
+	async listMembers(workspace_id: WorkspaceId): Promise<readonly MemberListEntry[]> {
+		// One join, ordered by role rank then joined_at. The ORDER BY
+		// CASE replicates the in-memory sort order so consumers see a
+		// consistent shape regardless of adapter.
+		const rows = await this.sql<Array<UserRow & MembershipRow>>`
+			SELECT u.*, m.workspace_id, m.user_id, m.role, m.joined_at
+			FROM workspace_members m
+			JOIN users u ON u.id = m.user_id
+			WHERE m.workspace_id = ${workspace_id}
+			ORDER BY
+				CASE m.role
+					WHEN 'owner'  THEN 0
+					WHEN 'admin'  THEN 1
+					WHEN 'member' THEN 2
+					WHEN 'viewer' THEN 3
+					ELSE 4
+				END,
+				m.joined_at ASC
+		`
+		return rows.map((row) => ({
+			user: userRowToRecord({
+				id: row.id,
+				github_id: row.github_id,
+				github_login: row.github_login,
+				email: row.email,
+				name: row.name,
+				created_at: row.created_at,
+				last_seen_at: row.last_seen_at,
+			}),
+			membership: membershipRowToRecord({
+				workspace_id: row.workspace_id,
+				user_id: row.user_id,
+				role: row.role,
+				joined_at: row.joined_at,
+			}),
+		}))
+	}
+
+	async setMemberRole(
+		workspace_id: WorkspaceId,
+		user_id: UserId,
+		role: WorkspaceRole
+	): Promise<MembershipRecord | null> {
+		// Single SQL guard against demoting the last owner: the UPDATE
+		// runs only when the new role is owner OR another owner exists.
+		// COALESCE wraps the count so a missing row produces 0, not null.
+		const rows = await this.sql<MembershipRow[]>`
+			UPDATE workspace_members SET role = ${role}
+			WHERE workspace_id = ${workspace_id}
+			  AND user_id = ${user_id}
+			  AND (
+				${role}::text = 'owner'
+				OR role <> 'owner'
+				OR (
+					SELECT count(*) FROM workspace_members
+					WHERE workspace_id = ${workspace_id} AND role = 'owner'
+				) > 1
+			  )
+			RETURNING *
+		`
+		if (rows[0]) return membershipRowToRecord(rows[0])
+		// Distinguish "no such row" from "last-owner refused".
+		const existing = await this.getMembership(user_id, workspace_id)
+		if (!existing) return null
+		if (existing.role === 'owner' && role !== 'owner') {
+			throw new TenancyForbiddenError(user_id, workspace_id, 'owner')
+		}
+		return null
+	}
+
+	async removeMember(
+		workspace_id: WorkspaceId,
+		user_id: UserId
+	): Promise<MembershipRecord | null> {
+		const rows = await this.sql<MembershipRow[]>`
+			DELETE FROM workspace_members
+			WHERE workspace_id = ${workspace_id}
+			  AND user_id = ${user_id}
+			  AND (
+				role <> 'owner'
+				OR (
+					SELECT count(*) FROM workspace_members
+					WHERE workspace_id = ${workspace_id} AND role = 'owner'
+				) > 1
+			  )
+			RETURNING *
+		`
+		if (rows[0]) return membershipRowToRecord(rows[0])
+		const existing = await this.getMembership(user_id, workspace_id)
+		if (!existing) return null
+		if (existing.role === 'owner') {
+			throw new TenancyForbiddenError(user_id, workspace_id, 'owner')
+		}
+		return null
+	}
+
+	async findUserByGithubLogin(login: string): Promise<UserRecord | null> {
+		const rows = await this.sql<UserRow[]>`
+			SELECT * FROM users
+			WHERE LOWER(github_login) = LOWER(${login})
+			LIMIT 1
+		`
+		return rows[0] ? userRowToRecord(rows[0]) : null
 	}
 }

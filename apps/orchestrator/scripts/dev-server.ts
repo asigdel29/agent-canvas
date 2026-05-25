@@ -62,6 +62,8 @@ import tokenByIdHandler from '../api/tokens/[id].js'
 import webhooksIndexHandler from '../api/webhooks/index.js'
 import webhookByIdHandler from '../api/webhooks/[id].js'
 import auditIndexHandler from '../api/audit/index.js'
+import workspacesIndexHandler from '../api/workspaces/index.js'
+import workspaceMembersHandler from '../api/workspaces/members.js'
 import stripeWebhookHandler from '../api/billing/stripe-webhook.js'
 import checkoutSessionHandler from '../api/billing/checkout-session.js'
 import portalSessionHandler from '../api/billing/portal-session.js'
@@ -151,6 +153,15 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	if (pathname.startsWith('/api/sync/') && (method === 'GET' || opts)) return syncHandler
 	if (pathname === '/api/audit' && (method === 'GET' || opts)) {
 		return auditIndexHandler
+	}
+	if (pathname === '/api/workspaces' && (method === 'GET' || method === 'POST' || opts)) {
+		return workspacesIndexHandler
+	}
+	if (
+		pathname.match(/^\/api\/workspaces\/[^/]+\/members(?:\/[^/]+)?$/) &&
+		(method === 'GET' || method === 'POST' || method === 'PATCH' || method === 'DELETE' || opts)
+	) {
+		return workspaceMembersHandler
 	}
 	if (pathname === '/api/billing/stripe-webhook' && (method === 'POST' || opts)) {
 		return stripeWebhookHandler
