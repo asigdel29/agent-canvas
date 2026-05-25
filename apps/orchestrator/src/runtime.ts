@@ -40,6 +40,11 @@ import {
 	tryCreateUpstashRateLimitStore,
 } from './rateLimit/rateLimitStore.js'
 import {
+	type WebhookEndpointStore,
+	InMemoryWebhookEndpointStore,
+	PostgresWebhookEndpointStore,
+} from './webhooks/webhookEndpointStore.js'
+import {
 	type ApprovalStore,
 	InMemoryApprovalStore,
 	PostgresApprovalStore,
@@ -121,6 +126,7 @@ export interface Runtime {
 	readonly tenancyStore: TenancyStore
 	readonly apiTokenStore: ApiTokenStore
 	readonly rateLimitStore: RateLimitStore
+	readonly webhookEndpointStore: WebhookEndpointStore
 }
 
 let cached: Runtime | null = null
@@ -302,5 +308,8 @@ function build(): Runtime {
 		// instance_count" rather than "limit per user". Same warn line
 		// as the SSE nonce store covers both cases.
 		rateLimitStore: tryCreateUpstashRateLimitStore() ?? new InMemoryRateLimitStore(),
+		webhookEndpointStore: sql
+			? new PostgresWebhookEndpointStore(sql)
+			: new InMemoryWebhookEndpointStore(),
 	}
 }
