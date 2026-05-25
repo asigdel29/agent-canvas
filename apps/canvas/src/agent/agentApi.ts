@@ -93,9 +93,71 @@ export class AgentApi {
 		await throwOnError(res)
 	}
 
+	/**
+	 * Fire a fresh run for an agent. Returns immediately with the
+	 * server-assigned run_id; events arrive over SSE on the room.
+	 */
+	async startRun(input: {
+		agent_id: string
+		initial_message: string
+	}): Promise<{ run_id: string; agent_id: string; room_id: string }> {
+		const res = await fetch(`${this.opts.baseUrl}/api/agents/runs`, {
+			method: 'POST',
+			headers: {
+				...this.authHeaders(),
+				'content-type': 'application/json',
+			},
+			body: JSON.stringify({
+				agent_id: input.agent_id,
+				room_id: this.opts.workspaceId,
+				initial_message: input.initial_message,
+			}),
+		})
+		await throwOnError(res)
+		return (await res.json()) as { run_id: string; agent_id: string; room_id: string }
+	}
+
+	async listApprovals(runId?: string): Promise<readonly PendingApprovalDto[]> {
+		const url = new URL(`${this.opts.baseUrl}/api/approvals`)
+		if (runId) url.searchParams.set('run_id', runId)
+		const res = await fetch(url.toString(), { headers: this.authHeaders() })
+		await throwOnError(res)
+		const body = (await res.json()) as { items: PendingApprovalDto[] }
+		return body.items
+	}
+
+	async resolveApproval(
+		id: string,
+		resolution: 'approved' | 'rejected'
+	): Promise<PendingApprovalDto> {
+		const res = await fetch(`${this.opts.baseUrl}/api/approvals/${encodeURIComponent(id)}`, {
+			method: 'POST',
+			headers: {
+				...this.authHeaders(),
+				'content-type': 'application/json',
+			},
+			body: JSON.stringify({ resolution }),
+		})
+		await throwOnError(res)
+		return (await res.json()) as PendingApprovalDto
+	}
+
 	private authHeaders(): Record<string, string> {
 		return { authorization: `Bearer ${this.opts.session}` }
 	}
+}
+
+export interface PendingApprovalDto {
+	readonly id: string
+	readonly agent_id: string
+	readonly run_id: string
+	readonly tool_name: string
+	readonly tool_input: Readonly<Record<string, unknown>>
+	readonly tool_description: string
+	readonly safety: 'destructive' | 'irreversible'
+	readonly requested_at: string
+	readonly resolved_at: string | null
+	readonly resolution: 'approved' | 'rejected' | null
 }
 
 async function throwOnError(res: Response): Promise<void> {
