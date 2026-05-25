@@ -58,7 +58,14 @@ export interface WebhookEndpointStore {
 	create(input: CreateEndpointInput): Promise<CreateEndpointResult>
 	listForWorkspace(workspace_id: WorkspaceId): Promise<readonly WebhookEndpointRecord[]>
 	getSigningSecret(id: string): Promise<string | null>
-	revoke(id: string, user_id: UserId): Promise<void>
+	/**
+	 * Soft-revoke. Returns the post-revoke record on success, null
+	 * when the caller doesn't own the id or the row was already
+	 * revoked. Same oracle defense as ApiTokenStore.revoke: the API
+	 * layer maps both shapes to a 204 response so the null branch
+	 * does not leak existence.
+	 */
+	revoke(id: string, user_id: UserId): Promise<WebhookEndpointRecord | null>
 	/** Match all live endpoints in a workspace that subscribe to event_type. */
 	matchSubscribers(
 		workspace_id: WorkspaceId,
@@ -126,14 +133,16 @@ export class InMemoryWebhookEndpointStore implements WebhookEndpointStore {
 		return r.signing_secret
 	}
 
-	async revoke(id: string, user_id: UserId): Promise<void> {
+	async revoke(id: string, user_id: UserId): Promise<WebhookEndpointRecord | null> {
 		const r = this.rows.get(id)
-		if (!r || r.rec.user_id !== user_id) return // silent no-op
-		if (r.rec.revoked_at !== null) return
-		this.rows.set(id, {
-			...r,
-			rec: { ...r.rec, revoked_at: new Date().toISOString() },
-		})
+		if (!r || r.rec.user_id !== user_id) return null // silent no-op
+		if (r.rec.revoked_at !== null) return null
+		const revoked: WebhookEndpointRecord = {
+			...r.rec,
+			revoked_at: new Date().toISOString(),
+		}
+		this.rows.set(id, { ...r, rec: revoked })
+		return revoked
 	}
 
 	async matchSubscribers(
@@ -224,16 +233,20 @@ export class PostgresWebhookEndpointStore implements WebhookEndpointStore {
 		return rows[0]?.signing_secret ?? null
 	}
 
-	async revoke(id: string, user_id: UserId): Promise<void> {
+	async revoke(id: string, user_id: UserId): Promise<WebhookEndpointRecord | null> {
 		// Match on id AND user_id — a delete that targets another user's
 		// endpoint is a silent no-op, same oracle defense as api tokens.
-		await this.sql`
+		// RETURNING gives the route enough context to write an audit
+		// row when an actual revoke happened.
+		const rows = await this.sql<EndpointRow[]>`
 			UPDATE webhook_endpoints
 			SET revoked_at = now()
 			WHERE id = ${id}
 			  AND user_id = ${user_id}
 			  AND revoked_at IS NULL
+			RETURNING *
 		`
+		return rows[0] ? rowToRecord(rows[0]) : null
 	}
 
 	async matchSubscribers(

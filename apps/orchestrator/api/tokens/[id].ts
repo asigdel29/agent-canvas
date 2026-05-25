@@ -32,10 +32,12 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const runtime = getRuntime() as unknown as {
 		apiTokenStore?: import('../../dist/tokens/apiTokenStore.js').ApiTokenStore
+		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
 	}
 	const store = runtime.apiTokenStore
-	if (!store) {
-		return withCorsHeaders(req, jsonError(500, 'api_token_store_not_initialized'))
+	const audit = runtime.workspaceAuditStore
+	if (!store || !audit) {
+		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
 	const url = new URL(req.url)
@@ -43,7 +45,21 @@ export default async function handler(req: Request): Promise<Response> {
 	const id = segments[segments.length - 1]
 	if (!id) return withCorsHeaders(req, jsonError(404, 'missing_id'))
 
-	await store.revoke(id, session.sub as UserId)
+	const revoked = await store.revoke(id, session.sub as UserId)
+	if (revoked) {
+		// Audit only when an actual revoke happened. Oracle defense
+		// already lives at the response layer (204 either way).
+		void audit
+			.append({
+				workspace_id: revoked.workspace_id,
+				actor_user_id: session.sub as UserId,
+				action: 'token.revoked',
+				target_type: 'api_token',
+				target_id: revoked.id,
+				details: { token_prefix: revoked.token_prefix },
+			})
+			.catch(() => undefined)
+	}
 	return withCorsHeaders(req, new Response(null, { status: 204 }))
 }
 
