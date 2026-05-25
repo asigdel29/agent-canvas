@@ -30,6 +30,11 @@ import {
 import { logger } from './observability/logger.js'
 import { makeSentryErrorHook } from './observability/errorReporter.js'
 import {
+	type ApiTokenStore,
+	InMemoryApiTokenStore,
+	PostgresApiTokenStore,
+} from './tokens/apiTokenStore.js'
+import {
 	type ApprovalStore,
 	InMemoryApprovalStore,
 	PostgresApprovalStore,
@@ -109,6 +114,7 @@ export interface Runtime {
 	readonly approvalStore: ApprovalStore
 	readonly approvalGate: StoreBackedApprovalGate
 	readonly tenancyStore: TenancyStore
+	readonly apiTokenStore: ApiTokenStore
 }
 
 let cached: Runtime | null = null
@@ -278,5 +284,6 @@ function build(): Runtime {
 		approvalStore,
 		approvalGate,
 		tenancyStore: sql ? new PostgresTenancyStore(sql) : new InMemoryTenancyStore(),
+		apiTokenStore: sql ? new PostgresApiTokenStore(sql) : new InMemoryApiTokenStore(),
 	}
 }
