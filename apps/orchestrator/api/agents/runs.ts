@@ -26,6 +26,7 @@ import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import type { AgentId } from '../../dist/agents/agentRecord.js'
 import { tryCreateAnthropicClient } from '../../dist/agents/anthropicClient.js'
+import { buildBrowserContribution } from '../../dist/agents/providers/browserProvider.js'
 import { buildMcpContribution } from '../../dist/agents/providers/mcpProvider.js'
 import {
 	BusRunEventSink,
@@ -91,8 +92,8 @@ export default async function handler(req: Request): Promise<Response> {
 	const run_id = newRunId()
 	const room_id = body.room_id as RoomId
 
-	// Build the MCP contribution before responding so a connect
-	// failure surfaces as 502 instead of going silent on a 202.
+	// Build the provider contributions before responding so connect
+	// failures surface as 502 instead of going silent on a 202.
 	const mcpContribution = await buildMcpContribution(
 		agent.capabilities.mcp_servers,
 		{
@@ -108,7 +109,11 @@ export default async function handler(req: Request): Promise<Response> {
 			},
 		}
 	)
-	const catalog = composeToolCatalog([mcpContribution])
+	const browserContribution = await buildBrowserContribution({
+		config: agent.capabilities.browser_use,
+		agent_id: agent.id,
+	})
+	const catalog = composeToolCatalog([mcpContribution, browserContribution])
 
 	const sink = new BusRunEventSink(bus, room_id)
 
