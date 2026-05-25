@@ -36,6 +36,7 @@ import {
 } from './agent/agentApi.js'
 import { agentShapeId, recordToShapeProps } from './agent/agentToShape.js'
 import { ErrorToast, type ErrorCard } from './errors/ErrorToast.js'
+import { SettingsDrawer } from './settings/SettingsDrawer.js'
 import { NewAgentModal, type NewAgentDraft } from './agent/NewAgentModal.js'
 import { ApprovalInbox, type ApprovalCard } from './inbox/ApprovalInbox.js'
 import { ConnectorStrip, type ConnectorTile } from './connectors/ConnectorStrip.js'
@@ -154,6 +155,7 @@ export function App() {
 	const [zoomPercent] = useState<number>(100)
 	const [density, setDensity] = useState<'compact' | 'full'>('full')
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+	const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
 	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
 	const [agents, setAgents] = useState<readonly AgentApiRecord[]>([])
 	const [errorCards, setErrorCards] = useState<readonly ErrorCard[]>([])
@@ -238,7 +240,7 @@ export function App() {
 				if (!cancelled) setAgents(items)
 			} catch (err) {
 				if (cancelled) return
-				pushError(toErrorCard(err, 'list agents'))
+				pushError(toErrorCard(err, 'list agents', () => setSettingsOpen(true)))
 			}
 		})()
 		return () => {
@@ -347,7 +349,7 @@ export function App() {
 			setAgentModalOpen(false)
 			// editor effect will pick up the new record on the next paint
 		} catch (err) {
-			pushError(toErrorCard(err, 'create agent'))
+			pushError(toErrorCard(err, 'create agent', () => setSettingsOpen(true)))
 		}
 	}
 
@@ -361,7 +363,7 @@ export function App() {
 		try {
 			await agentApi.startRun({ agent_id: agentId, initial_message: initialMessage })
 		} catch (err) {
-			pushError(toErrorCard(err, 'start run'))
+			pushError(toErrorCard(err, 'start run', () => setSettingsOpen(true)))
 		}
 	}
 
@@ -417,7 +419,7 @@ export function App() {
 			await agentApi.resolveApproval(approvalId, resolution)
 			setLiveApprovals((prev) => prev.filter((a) => a.id !== approvalId))
 		} catch (err) {
-			pushError(toErrorCard(err, 'resolve approval'))
+			pushError(toErrorCard(err, 'resolve approval', () => setSettingsOpen(true)))
 		}
 	}
 
@@ -491,11 +493,13 @@ export function App() {
 	const hasAnyAgent = agents.length > 0
 	const showEmptyState = !hasAnyConnector && !hasAnyAgent
 
-	const rightRailMode: RightRailMode = selectedRunId
-		? 'inspector'
-		: liveEvents.length > 0 || liveApprovals.length > 0
-			? 'activity'
-			: 'empty'
+	const rightRailMode: RightRailMode = settingsOpen
+		? 'settings'
+		: selectedRunId
+			? 'inspector'
+			: liveEvents.length > 0 || liveApprovals.length > 0
+				? 'activity'
+				: 'empty'
 
 	return (
 		<>
@@ -514,6 +518,7 @@ export function App() {
 						spend={
 							<SpendIndicator accrued_micros={3_420_000} ceiling_micros={50_000_000} />
 						}
+						onSettingsClick={() => setSettingsOpen((s) => !s)}
 					/>
 				}
 				leftRail={
@@ -552,6 +557,23 @@ export function App() {
 								cards={approvalCards}
 								onApprove={(card) => handleResolveApproval(card.id, 'approved')}
 								onReject={(card) => handleResolveApproval(card.id, 'rejected')}
+							/>
+						}
+						settingsContent={
+							<SettingsDrawer
+								onClose={() => setSettingsOpen(false)}
+								onSave={() => {
+									// Dismiss the anthropic_not_configured warning if it
+									// was the active error; the next run will use the
+									// new key from the header.
+									setErrorCards((prev) =>
+										prev.filter(
+											(c) =>
+												!c.title.includes("couldn't") &&
+												!c.title.includes('disabled')
+										)
+									)
+								}}
 							/>
 						}
 					/>
@@ -860,7 +882,11 @@ function Section({ label, children }: { label: string; children: React.ReactNode
  * on the error code. New error codes from the orchestrator get a
  * branch here; unknown ones fall through to a generic shape.
  */
-function toErrorCard(err: unknown, what: string): Omit<ErrorCard, 'id'> {
+function toErrorCard(
+	err: unknown,
+	what: string,
+	openSettings?: () => void
+): Omit<ErrorCard, 'id'> {
 	if (err instanceof AgentApiError) {
 		const code = err.code
 		// Errors with known remediation paths get their own copy.
@@ -868,8 +894,9 @@ function toErrorCard(err: unknown, what: string): Omit<ErrorCard, 'id'> {
 			return {
 				title: `The agent couldn't ${what}.`,
 				cause:
-					'Your orchestrator has no ANTHROPIC_API_KEY set. Without it, no agent run can start.',
-				docsUrl: 'https://github.com/asigdel29/agent-canvas#setup',
+					'No Claude API key is set. Paste yours in Settings (or set ANTHROPIC_API_KEY on the orchestrator).',
+				fix: openSettings ? { label: 'Open Settings', onClick: openSettings } : undefined,
+				docsUrl: 'https://console.anthropic.com/settings/keys',
 				severity: 'error',
 			}
 		}
