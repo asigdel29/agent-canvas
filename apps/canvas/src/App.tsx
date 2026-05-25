@@ -712,6 +712,8 @@ export function App() {
 						settingsContent={
 							<SettingsDrawer
 								onClose={() => setSettingsOpen(false)}
+								orchestratorUrl={ORCHESTRATOR_URL}
+								session={realtime.session}
 								onSave={(v) => {
 									track('settings_saved', {
 										has_anthropic: Boolean(v.anthropic_api_key),
