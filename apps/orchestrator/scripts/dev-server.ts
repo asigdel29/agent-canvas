@@ -63,6 +63,9 @@ import webhooksIndexHandler from '../api/webhooks/index.js'
 import webhookByIdHandler from '../api/webhooks/[id].js'
 import auditIndexHandler from '../api/audit/index.js'
 import stripeWebhookHandler from '../api/billing/stripe-webhook.js'
+import checkoutSessionHandler from '../api/billing/checkout-session.js'
+import portalSessionHandler from '../api/billing/portal-session.js'
+import billingStatusHandler from '../api/billing/status.js'
 import drainWebhooksHandler from '../api/admin/webhooks/drain.js'
 import approvalsIndexHandler from '../api/approvals/index.js'
 import approvalByIdHandler from '../api/approvals/[id].js'
@@ -151,6 +154,15 @@ function matchRoute(method: string, pathname: string): Handler | null {
 	}
 	if (pathname === '/api/billing/stripe-webhook' && (method === 'POST' || opts)) {
 		return stripeWebhookHandler
+	}
+	if (pathname === '/api/billing/checkout-session' && (method === 'POST' || opts)) {
+		return checkoutSessionHandler
+	}
+	if (pathname === '/api/billing/portal-session' && (method === 'POST' || opts)) {
+		return portalSessionHandler
+	}
+	if (pathname === '/api/billing/status' && (method === 'GET' || opts)) {
+		return billingStatusHandler
 	}
 	if (pathname === '/api/admin/webhooks/drain' && (method === 'POST' || opts)) {
 		return drainWebhooksHandler
