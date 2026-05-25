@@ -27,10 +27,12 @@ export default async function handler(req: Request): Promise<Response> {
 
 	const runtime = getRuntime() as unknown as {
 		webhookEndpointStore?: import('../../dist/webhooks/webhookEndpointStore.js').WebhookEndpointStore
+		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
 	}
 	const store = runtime.webhookEndpointStore
-	if (!store) {
-		return withCorsHeaders(req, jsonError(500, 'webhook_store_not_initialized'))
+	const audit = runtime.workspaceAuditStore
+	if (!store || !audit) {
+		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
 	const url = new URL(req.url)
@@ -38,7 +40,26 @@ export default async function handler(req: Request): Promise<Response> {
 	const id = segments[segments.length - 1]
 	if (!id) return withCorsHeaders(req, jsonError(404, 'missing_id'))
 
-	await store.revoke(id, session.sub as UserId)
+	const revoked = await store.revoke(id, session.sub as UserId)
+	if (revoked) {
+		const urlHost = (() => {
+			try {
+				return new URL(revoked.url).host
+			} catch {
+				return 'unknown'
+			}
+		})()
+		void audit
+			.append({
+				workspace_id: revoked.workspace_id,
+				actor_user_id: session.sub as UserId,
+				action: 'webhook.revoked',
+				target_type: 'webhook_endpoint',
+				target_id: revoked.id,
+				details: { url_host: urlHost },
+			})
+			.catch(() => undefined)
+	}
 	return withCorsHeaders(req, new Response(null, { status: 204 }))
 }
 

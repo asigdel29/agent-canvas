@@ -40,11 +40,13 @@ export default async function handler(req: Request): Promise<Response> {
 		webhookEndpointStore?: import('../../dist/webhooks/webhookEndpointStore.js').WebhookEndpointStore
 		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
 		rateLimitStore?: import('../../dist/rateLimit/rateLimitStore.js').RateLimitStore
+		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
 	}
 	const store = runtime.webhookEndpointStore
 	const tenancy = runtime.tenancyStore
 	const rateLimit = runtime.rateLimitStore
-	if (!store || !tenancy || !rateLimit) {
+	const audit = runtime.workspaceAuditStore
+	if (!store || !tenancy || !rateLimit || !audit) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -118,6 +120,26 @@ export default async function handler(req: Request): Promise<Response> {
 			...(events !== undefined ? { events } : {}),
 			...(body.description !== undefined ? { description: body.description } : {}),
 		})
+		// Audit. The full URL is sensitive (it may carry a path-baked
+		// secret), so we record host only. Subscribed event list is
+		// safe and useful in the trail.
+		const urlHost = (() => {
+			try {
+				return new URL(created.record.url).host
+			} catch {
+				return 'unknown'
+			}
+		})()
+		void audit
+			.append({
+				workspace_id,
+				actor_user_id: user_id,
+				action: 'webhook.created',
+				target_type: 'webhook_endpoint',
+				target_id: created.record.id,
+				details: { url_host: urlHost, events: created.record.events },
+			})
+			.catch(() => undefined)
 		return withCorsHeaders(
 			req,
 			new Response(

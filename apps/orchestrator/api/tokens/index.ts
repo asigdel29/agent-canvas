@@ -28,11 +28,13 @@ export default async function handler(req: Request): Promise<Response> {
 		apiTokenStore?: import('../../dist/tokens/apiTokenStore.js').ApiTokenStore
 		tenancyStore?: import('../../dist/tenancy/tenancyStore.js').TenancyStore
 		rateLimitStore?: import('../../dist/rateLimit/rateLimitStore.js').RateLimitStore
+		workspaceAuditStore?: import('../../dist/audit/workspaceAuditStore.js').WorkspaceAuditStore
 	}
 	const store = runtime.apiTokenStore
 	const tenancy = runtime.tenancyStore
 	const rateLimit = runtime.rateLimitStore
-	if (!store || !tenancy || !rateLimit) {
+	const audit = runtime.workspaceAuditStore
+	if (!store || !tenancy || !rateLimit || !audit) {
 		return withCorsHeaders(req, jsonError(500, 'runtime_not_fully_initialized'))
 	}
 
@@ -97,6 +99,23 @@ export default async function handler(req: Request): Promise<Response> {
 			scope,
 			...(body.expires_at !== undefined ? { expires_at: body.expires_at } : {}),
 		})
+		// Append to the workspace audit trail. Best-effort: an audit
+		// write failure must not block the user's mint. Errors are
+		// swallowed; logging happens at the store level.
+		void audit
+			.append({
+				workspace_id,
+				actor_user_id: user_id,
+				action: 'token.minted',
+				target_type: 'api_token',
+				target_id: issued.record.id,
+				details: {
+					name: issued.record.name,
+					scope: issued.record.scope,
+					token_prefix: issued.record.token_prefix,
+				},
+			})
+			.catch(() => undefined)
 		// Return the raw token EXACTLY ONCE. Future GETs only show
 		// the hash-derived prefix.
 		return withCorsHeaders(

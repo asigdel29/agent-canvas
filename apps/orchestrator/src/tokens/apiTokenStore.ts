@@ -63,7 +63,15 @@ export interface ApiTokenStore {
 	issue(input: IssueInput): Promise<IssueResult>
 	listForUser(user_id: UserId): Promise<readonly ApiTokenRecord[]>
 	verify(raw_token: string): Promise<ApiTokenRecord | null>
-	revoke(id: string, user_id: UserId): Promise<void>
+	/**
+	 * Soft-revoke the token identified by id when the caller owns it.
+	 * Returns the post-revoke record on success, null when the id is
+	 * unknown, owned by another user, or already revoked. The API
+	 * layer returns the same 204 regardless so the null branch does
+	 * NOT leak existence; the return value exists so callers (audit
+	 * logging, metrics) can act on a successful revoke.
+	 */
+	revoke(id: string, user_id: UserId): Promise<ApiTokenRecord | null>
 }
 
 const PREFIX = 'ack_'
@@ -138,14 +146,13 @@ export class InMemoryApiTokenStore implements ApiTokenStore {
 		return null
 	}
 
-	async revoke(id: string, user_id: UserId): Promise<void> {
+	async revoke(id: string, user_id: UserId): Promise<ApiTokenRecord | null> {
 		const r = this.rows.get(id)
-		if (!r || r.rec.user_id !== user_id) return // silent no-op (don't leak existence)
-		if (r.rec.revoked_at !== null) return
-		this.rows.set(id, {
-			...r,
-			rec: { ...r.rec, revoked_at: new Date().toISOString() },
-		})
+		if (!r || r.rec.user_id !== user_id) return null // silent no-op (don't leak existence)
+		if (r.rec.revoked_at !== null) return null
+		const revoked: ApiTokenRecord = { ...r.rec, revoked_at: new Date().toISOString() }
+		this.rows.set(id, { ...r, rec: revoked })
+		return revoked
 	}
 }
 
@@ -241,15 +248,19 @@ export class PostgresApiTokenStore implements ApiTokenStore {
 		return rec
 	}
 
-	async revoke(id: string, user_id: UserId): Promise<void> {
+	async revoke(id: string, user_id: UserId): Promise<ApiTokenRecord | null> {
 		// The user_id gate makes this safe even if a request supplies
 		// someone else's token id. We don't surface a 404 vs 403
 		// distinction — both look like 'silently nothing happened'
-		// to avoid existence-oracle attacks.
-		await this.sql`
+		// to avoid existence-oracle attacks. The RETURNING clause
+		// gives the route enough context to emit an audit row when
+		// an actual revoke happened (no row updated = no audit).
+		const rows = await this.sql<ApiTokenRow[]>`
 			UPDATE api_tokens
 			SET revoked_at = now()
 			WHERE id = ${id} AND user_id = ${user_id} AND revoked_at IS NULL
+			RETURNING *
 		`
+		return rows[0] ? rowToRecord(rows[0]) : null
 	}
 }
