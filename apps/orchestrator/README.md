@@ -7,7 +7,7 @@ Backend orchestrator for agent-canvas. Deployed on Vercel Functions.
 ```
 GET    /api/health
 POST   /api/commands
-POST   /api/webhooks/:provider
+POST   /api/webhooks/ingest/:provider
 GET    /api/oauth/:provider/start
 GET    /api/oauth/:provider/callback
 ```

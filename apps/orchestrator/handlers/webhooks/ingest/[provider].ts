@@ -19,7 +19,7 @@
  * work runs in the outbox drainer, not here.
  */
 
-import { getRuntime } from '../../dist/index.js'
+import { getRuntime } from '../../../dist/index.js'
 import type { ProviderId, VendorId } from '@agent-canvas/orchestrator-types'
 
 interface WebhookRequest {
