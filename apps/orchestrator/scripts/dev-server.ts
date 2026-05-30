@@ -1,22 +1,23 @@
 /**
  * Local development server for the orchestrator.
  *
- * The orchestrator ships as a set of Vercel Function handlers — each
- * `api/*.ts` exports a default function that takes a Web `Request` and
- * returns a Web `Response`. In production Vercel's runtime maps each
- * file to a route and dispatches accordingly. This script does the same
- * thing locally on a plain Node http server, so the stack can be
- * exercised end-to-end without `vercel dev` or any external login.
+ * The orchestrator ships as a set of handler modules under `handlers/`,
+ * each exporting a default function that takes a Web `Request` and returns
+ * a Web `Response`. In production a single Vercel catch-all
+ * (`api/dispatch.ts`) routes every `/api/*` request to the matching
+ * handler via the shared route table in `handlers/_router.ts`. This script
+ * does the same thing locally on a plain Node http server, so the stack
+ * can be exercised end-to-end without `vercel dev` or any external login.
  *
- * Routes mirror the file layout under `api/`:
+ * Routes mirror the file layout under `handlers/`:
  *
- *     GET  /api/health                  → api/health.ts
- *     POST /api/commands                → api/commands.ts
- *     POST /api/auth/sse-token          → api/auth/sse-token.ts
- *     GET  /api/sync/:room              → api/sync/[room].ts
- *     POST /api/webhooks/:provider      → api/webhooks/[provider].ts
- *     GET  /api/oauth/:provider/start   → api/oauth/[provider]/start.ts
- *     GET  /api/oauth/:provider/callback → api/oauth/[provider]/callback.ts
+ *     GET  /api/health                    → handlers/health.ts
+ *     POST /api/commands                  → handlers/commands.ts
+ *     POST /api/auth/sse-token            → handlers/auth/sse-token.ts
+ *     GET  /api/sync/:room                → handlers/sync/[room].ts
+ *     POST /api/webhooks/ingest/:provider → handlers/webhooks/ingest/[provider].ts
+ *     GET  /api/oauth/:provider/start     → handlers/oauth/[provider]/start.ts
+ *     GET  /api/oauth/:provider/callback  → handlers/oauth/[provider]/callback.ts
  *
  * Additionally, two dev-only helpers ship under `/dev/*`. These are
  * never registered in production (the path prefix is not deployed) and
@@ -47,35 +48,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import healthHandler from '../api/health.js'
-import commandsHandler from '../api/commands.js'
-import sseTokenHandler from '../api/auth/sse-token.js'
-import authLoginGithubHandler from '../api/auth/login/github.js'
-import authGithubCallbackHandler from '../api/auth/github/callback.js'
-import agentsIndexHandler from '../api/agents/index.js'
-import agentByIdHandler from '../api/agents/[id].js'
-import agentRunsHandler from '../api/agents/runs.js'
-import agentProbeMcpHandler from '../api/agents/probe-mcp.js'
-import feedbackHandler from '../api/feedback.js'
-import tokensIndexHandler from '../api/tokens/index.js'
-import tokenByIdHandler from '../api/tokens/[id].js'
-import webhooksIndexHandler from '../api/webhooks/index.js'
-import webhookByIdHandler from '../api/webhooks/[id].js'
-import auditIndexHandler from '../api/audit/index.js'
-import workspacesIndexHandler from '../api/workspaces/index.js'
-import workspaceMembersHandler from '../api/workspaces/members.js'
-import stripeWebhookHandler from '../api/billing/stripe-webhook.js'
-import checkoutSessionHandler from '../api/billing/checkout-session.js'
-import portalSessionHandler from '../api/billing/portal-session.js'
-import billingStatusHandler from '../api/billing/status.js'
-import drainWebhooksHandler from '../api/admin/webhooks/drain.js'
-import cronDrainWebhooksHandler from '../api/cron/drain-webhooks.js'
-import approvalsIndexHandler from '../api/approvals/index.js'
-import approvalByIdHandler from '../api/approvals/[id].js'
-import syncHandler from '../api/sync/[room].js'
-import webhookHandler from '../api/webhooks/[provider].js'
-import oauthStartHandler from '../api/oauth/[provider]/start.js'
-import oauthCallbackHandler from '../api/oauth/[provider]/callback.js'
+import { loadRoute } from '../handlers/_router.js'
 
 import { signSession } from '../dist/auth/jwt.js'
 import { getRuntime } from '../dist/index.js'
@@ -96,114 +69,8 @@ if (!process.env['ALLOWED_ORIGINS']) {
 	process.env['ALLOWED_ORIGINS'] = 'http://localhost:5173,http://localhost:5420'
 }
 
-/**
- * Route the incoming Node request to the matching Vercel handler.
- * Returns null when no route matches; the caller writes a 404.
- */
-type Handler = (req: Request) => Promise<Response>
-
-function matchRoute(method: string, pathname: string): Handler | null {
-	// Every handler under api/ runs its own preflight check via the cors
-	// module, so forward OPTIONS to whichever handler owns the path. The
-	// handler returns 204 for a CORS preflight and the method-specific
-	// behavior otherwise.
-	const opts = method === 'OPTIONS'
-	if (pathname === '/api/health' && method === 'GET') return healthHandler
-	if (pathname === '/api/commands' && (method === 'POST' || opts)) return commandsHandler
-	if (pathname === '/api/auth/sse-token' && (method === 'POST' || opts)) {
-		return sseTokenHandler
-	}
-	if (pathname === '/api/auth/login/github' && method === 'GET') return authLoginGithubHandler
-	if (pathname === '/api/auth/github/callback' && method === 'GET') return authGithubCallbackHandler
-	if (pathname === '/api/agents' && (method === 'GET' || method === 'POST' || opts)) {
-		return agentsIndexHandler
-	}
-	if (pathname === '/api/agents/runs' && (method === 'POST' || opts)) {
-		return agentRunsHandler
-	}
-	if (pathname === '/api/agents/probe-mcp' && (method === 'POST' || opts)) {
-		return agentProbeMcpHandler
-	}
-	if (pathname === '/api/feedback' && (method === 'POST' || opts)) {
-		return feedbackHandler
-	}
-	if (pathname === '/api/tokens' && (method === 'GET' || method === 'POST' || opts)) {
-		return tokensIndexHandler
-	}
-	if (
-		pathname.match(/^\/api\/tokens\/[^/]+$/) &&
-		(method === 'DELETE' || opts)
-	) {
-		return tokenByIdHandler
-	}
-	if (
-		pathname.match(/^\/api\/agents\/[^/]+$/) &&
-		(method === 'GET' || method === 'PATCH' || method === 'DELETE' || opts)
-	) {
-		return agentByIdHandler
-	}
-	if (pathname === '/api/approvals' && (method === 'GET' || opts)) {
-		return approvalsIndexHandler
-	}
-	if (
-		pathname.match(/^\/api\/approvals\/[^/]+$/) &&
-		(method === 'POST' || opts)
-	) {
-		return approvalByIdHandler
-	}
-	if (pathname.startsWith('/api/sync/') && (method === 'GET' || opts)) return syncHandler
-	if (pathname === '/api/audit' && (method === 'GET' || opts)) {
-		return auditIndexHandler
-	}
-	if (pathname === '/api/workspaces' && (method === 'GET' || method === 'POST' || opts)) {
-		return workspacesIndexHandler
-	}
-	if (
-		pathname.match(/^\/api\/workspaces\/[^/]+\/members(?:\/[^/]+)?$/) &&
-		(method === 'GET' || method === 'POST' || method === 'PATCH' || method === 'DELETE' || opts)
-	) {
-		return workspaceMembersHandler
-	}
-	if (pathname === '/api/billing/stripe-webhook' && (method === 'POST' || opts)) {
-		return stripeWebhookHandler
-	}
-	if (pathname === '/api/billing/checkout-session' && (method === 'POST' || opts)) {
-		return checkoutSessionHandler
-	}
-	if (pathname === '/api/billing/portal-session' && (method === 'POST' || opts)) {
-		return portalSessionHandler
-	}
-	if (pathname === '/api/billing/status' && (method === 'GET' || opts)) {
-		return billingStatusHandler
-	}
-	if (pathname === '/api/admin/webhooks/drain' && (method === 'POST' || opts)) {
-		return drainWebhooksHandler
-	}
-	if (pathname === '/api/cron/drain-webhooks' && (method === 'GET' || opts)) {
-		return cronDrainWebhooksHandler
-	}
-	// Outbound webhook management — list / register / revoke.
-	// Matched BEFORE the inbound /api/webhooks/:provider route so a
-	// GET or DELETE on /api/webhooks(...) reaches the outbound
-	// handlers; POSTs with a provider segment still flow to inbound.
-	if (pathname === '/api/webhooks' && (method === 'GET' || method === 'POST' || opts)) {
-		return webhooksIndexHandler
-	}
-	if (
-		pathname.match(/^\/api\/webhooks\/whe_[^/]+$/) &&
-		(method === 'DELETE' || opts)
-	) {
-		return webhookByIdHandler
-	}
-	if (pathname.startsWith('/api/webhooks/') && (method === 'POST' || opts)) return webhookHandler
-	if (pathname.match(/^\/api\/oauth\/[^/]+\/start$/) && (method === 'GET' || opts)) {
-		return oauthStartHandler
-	}
-	if (pathname.match(/^\/api\/oauth\/[^/]+\/callback$/) && (method === 'GET' || opts)) {
-		return oauthCallbackHandler
-	}
-	return null
-}
+// Route matching lives in handlers/_router.ts so the Vercel catch-all
+// (api/dispatch.ts) and the dev server share one table.
 
 async function nodeRequestToWebRequest(req: IncomingMessage): Promise<Request> {
 	// Reconstruct an absolute URL. Node IncomingMessage carries only the path.
@@ -357,7 +224,7 @@ const server = createServer(async (rawReq, rawRes) => {
 		return
 	}
 
-	const handler = matchRoute(method, pathname)
+	const handler = await loadRoute(method, pathname)
 	if (!handler) {
 		rawRes.statusCode = 404
 		rawRes.setHeader('content-type', 'application/json')

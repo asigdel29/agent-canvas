@@ -3,15 +3,18 @@
 	"framework": null,
 	"outputDirectory": "public",
 	"functions": {
-		"api/**/*.ts": {
-			"runtime": "@vercel/node@5.0.0",
+		"api/dispatch.ts": {
+			"runtime": "@vercel/node@5.8.5",
 			"maxDuration": 60
 		}
 	},
+	"rewrites": [
+		{ "source": "/api/(.*)", "destination": "/api/dispatch" }
+	],
 	"crons": [
 		{
 			"path": "/api/cron/drain-webhooks",
-			"schedule": "* * * * *"
+			"schedule": "0 0 * * *"
 		}
 	]
 }
