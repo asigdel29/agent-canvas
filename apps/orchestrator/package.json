@@ -19,14 +19,14 @@
   "dependencies": {
     "@agent-canvas/connector-core": "*",
     "@agent-canvas/orchestrator-types": "*",
-    "@e2b/desktop": "^2.2.3",
+    "@e2b/desktop": "^2.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "playwright": "^1.60.0",
     "postgres": "^3.4.0"
   },
   "devDependencies": {
-    "tsx": "^4.22.3",
-    "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }
