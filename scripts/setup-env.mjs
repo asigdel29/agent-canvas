@@ -1,28 +1,28 @@
 #!/usr/bin/env node
 /**
- * setup-env.mjs — produce a usable apps/orchestrator/.env.local from
- * .env.example, with cryptographically-random secrets pre-filled.
+ * setup-env.mjs — produce a usable .env from .env.example at the repo
+ * root, with cryptographically-random secrets pre-filled.
  *
  * What gets filled in:
- *   JWT_SECRET, SSE_TOKEN_SECRET, AUTH_STATE_SECRET — three 32-byte
- *   hex strings via crypto.randomBytes. Each one is independent so
- *   a leak of one never compromises the others.
+ *   JWT_SECRET, SSE_TOKEN_SECRET, AUTH_STATE_SECRET, VAULT_KEY — four
+ *   independent 32-byte hex strings via crypto.randomBytes, so leaking
+ *   one never compromises the others.
  *
  * What is left blank (and the script tells you so):
- *   - DATABASE_URL, DATABASE_URL_SESSION (Neon)
+ *   - DATABASE_URL, DATABASE_URL_SESSION (Postgres / Railway)
  *   - ANTHROPIC_API_KEY, E2B_API_KEY (BYOK; can also live in the
- *     browser via SettingsDrawer)
- *   - GITHUB_OAUTH_CLIENT_ID / SECRET (per-deploy OAuth app)
- *   - UPSTASH_REDIS_REST_URL / TOKEN (production-only)
- *   - WEBHOOK_SECRET_* (one per provider you wire)
- *   - KMS_KEY_ID (production-only)
+ *     browser via the Settings drawer)
+ *   - GITHUB_OAUTH_CLIENT_ID / SECRET (needed only for AUTH_MODE=github)
+ *   - WEBHOOK_SECRET_GITHUB (only if you wire GitHub webhooks)
  *
- * Refuses to overwrite an existing .env.local — pass --force to
- * blow away the existing file (lossy; the prior secrets are gone).
+ * Refuses to overwrite an existing .env — pass --force to blow away the
+ * existing file (lossy; the prior secrets are gone).
  *
  * Usage:
- *   npm run setup:env              # creates if missing
+ *   npm run setup:env              # creates ./.env if missing
  *   npm run setup:env -- --force   # overwrites
+ *
+ * @author asigdel29
  */
 
 import { randomBytes } from 'node:crypto'
@@ -32,10 +32,10 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..')
-const EXAMPLE_PATH = join(REPO_ROOT, 'apps/orchestrator/.env.example')
-const TARGET_PATH = join(REPO_ROOT, 'apps/orchestrator/.env.local')
+const EXAMPLE_PATH = join(REPO_ROOT, '.env.example')
+const TARGET_PATH = join(REPO_ROOT, '.env')
 
-const SECRETS_TO_FILL = ['JWT_SECRET', 'SSE_TOKEN_SECRET', 'AUTH_STATE_SECRET']
+const SECRETS_TO_FILL = ['JWT_SECRET', 'SSE_TOKEN_SECRET', 'AUTH_STATE_SECRET', 'VAULT_KEY']
 
 async function fileExists(path) {
 	try {
@@ -81,15 +81,13 @@ async function main() {
 	console.log(`[setup-env] wrote ${TARGET_PATH}`)
 	console.log(`[setup-env] filled with fresh 32-byte hex secrets:`)
 	for (const key of SECRETS_TO_FILL) console.log(`  ${key}`)
-	console.log(`[setup-env] still TODO before you run dev:`)
-	console.log(`  GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET`)
-	console.log(`    (create at https://github.com/settings/developers)`)
-	console.log(`  CANVAS_ORIGIN     defaults to http://localhost:5173 — fine for local`)
-	console.log(`  ANTHROPIC_API_KEY (optional — can paste in the Settings drawer instead)`)
-	console.log(`  E2B_API_KEY       (optional — only for computer-use agents)`)
-	console.log(`  DATABASE_URL      (optional — without it the orchestrator runs in-memory)`)
+	console.log(`[setup-env] edit ./.env to finish:`)
+	console.log(`  DATABASE_URL      Postgres URL (without it, state is in-memory)`)
+	console.log(`  ANTHROPIC_API_KEY optional — users can also paste a key in Settings`)
+	console.log(`  AUTH_MODE=open    to let teammates join by name (no GitHub app), OR`)
+	console.log(`  GITHUB_OAUTH_*    set both for AUTH_MODE=github`)
 	console.log(``)
-	console.log(`[setup-env] next: npm run dev`)
+	console.log(`[setup-env] next: npm start  (or npm run dev for hot reload)`)
 }
 
 main().catch((err) => {

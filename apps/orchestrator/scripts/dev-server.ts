@@ -28,7 +28,7 @@
  *     GET  /dev/emit/:room              push a synthetic run event onto
  *                                       the room's bus (smoke-test SSE)
  *
- * Required env vars (load from .env.local — see .env.example):
+ * Required env vars (loaded from ./.env — see .env.example):
  *
  *     JWT_SECRET            session-JWT HMAC key
  *     SSE_TOKEN_SECRET      SSE-token HMAC key (distinct from JWT_SECRET)
@@ -57,7 +57,16 @@ import {
 import { signSession } from '../dist/auth/jwt.js'
 import { getRuntime } from '../dist/index.js'
 
-loadDotEnvIfPresent([resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env.local')])
+// Prefer the consolidated repo-root .env (what ./scripts/setup.sh
+// writes); fall back to the orchestrator-local .env.local for anyone
+// still using the older per-workspace file.
+{
+	const scriptDir = dirname(fileURLToPath(import.meta.url))
+	loadDotEnvIfPresent([
+		resolve(scriptDir, '..', '..', '..', '.env'),
+		resolve(scriptDir, '..', '.env.local'),
+	])
+}
 
 const PORT = Number(process.env['PORT'] ?? 3000)
 const REQUIRED = ['JWT_SECRET', 'SSE_TOKEN_SECRET'] as const
@@ -65,7 +74,7 @@ const missing = REQUIRED.filter((k) => !process.env[k])
 if (missing.length > 0) {
 	process.stderr.write(
 		`[dev-server] missing required env vars: ${missing.join(', ')}\n` +
-			`Copy apps/orchestrator/.env.example to apps/orchestrator/.env.local and set them.\n`
+			`Run ./scripts/setup.sh (it generates them) or set them in ./.env.\n`
 	)
 	process.exit(1)
 }
