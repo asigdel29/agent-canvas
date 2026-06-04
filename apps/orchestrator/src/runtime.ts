@@ -55,11 +55,6 @@ import {
 	PostgresWorkspaceAuditStore,
 } from './audit/workspaceAuditStore.js'
 import {
-	type BillingStore,
-	InMemoryBillingStore,
-	PostgresBillingStore,
-} from './billing/billingStore.js'
-import {
 	type ApprovalStore,
 	InMemoryApprovalStore,
 	PostgresApprovalStore,
@@ -144,7 +139,6 @@ export interface Runtime {
 	readonly webhookEndpointStore: WebhookEndpointStore
 	readonly webhookDeliveryStore: WebhookDeliveryStore
 	readonly workspaceAuditStore: WorkspaceAuditStore
-	readonly billingStore: BillingStore
 }
 
 let cached: Runtime | null = null
@@ -335,6 +329,5 @@ function build(): Runtime {
 		workspaceAuditStore: sql
 			? new PostgresWorkspaceAuditStore(sql)
 			: new InMemoryWorkspaceAuditStore(),
-		billingStore: sql ? new PostgresBillingStore(sql) : new InMemoryBillingStore(),
 	}
 }

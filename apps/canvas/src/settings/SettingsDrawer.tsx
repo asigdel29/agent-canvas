@@ -37,7 +37,6 @@
 import { useState } from 'react'
 import { TokensSection } from './TokensSection.js'
 import { WebhooksSection } from './WebhooksSection.js'
-import { BillingSection } from './BillingSection.js'
 
 export const SETTINGS_STORAGE = {
 	anthropicKey: 'agent-canvas:anthropic_api_key',
@@ -220,11 +219,6 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 
 			{orchestratorUrl && session && (
 				<>
-					<div
-						aria-hidden
-						style={{ height: 1, background: 'var(--border)', margin: 'var(--space-2) 0' }}
-					/>
-					<BillingSection orchestratorUrl={orchestratorUrl} session={session} />
 					<div
 						aria-hidden
 						style={{ height: 1, background: 'var(--border)', margin: 'var(--space-2) 0' }}

@@ -114,26 +114,6 @@ const routes: Route[] = [
 		load: () => import('./workspaces/members.js'),
 	},
 	{
-		id: 'billing/stripe-webhook',
-		match: exact('/api/billing/stripe-webhook', ['POST']),
-		load: () => import('./billing/stripe-webhook.js'),
-	},
-	{
-		id: 'billing/checkout-session',
-		match: exact('/api/billing/checkout-session', ['POST']),
-		load: () => import('./billing/checkout-session.js'),
-	},
-	{
-		id: 'billing/portal-session',
-		match: exact('/api/billing/portal-session', ['POST']),
-		load: () => import('./billing/portal-session.js'),
-	},
-	{
-		id: 'billing/status',
-		match: exact('/api/billing/status', ['GET']),
-		load: () => import('./billing/status.js'),
-	},
-	{
 		id: 'admin/webhooks/drain',
 		match: exact('/api/admin/webhooks/drain', ['POST']),
 		load: () => import('./admin/webhooks/drain.js'),

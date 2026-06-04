@@ -13,7 +13,7 @@
  *   for await (const event of ac.runs.stream(run.run_id)) { ... }  // future
  *
  * Method shape mirrors the route surface: tokens, webhooks, audit,
- * billing, runs. Each method throws an ApiError when the orchestrator
+ * runs. Each method throws an ApiError when the orchestrator
  * returns a non-2xx; success returns a typed body.
  *
  * Rate-limit headers are surfaced through the ApiError on 429 so a
@@ -26,7 +26,6 @@ import type {
 	IssuedWebhookEndpoint,
 	WebhookEndpointSummary,
 	AuditEvent,
-	BillingStatus,
 	RunStartInput,
 	RunStartResult,
 	ApiTokenScope,
@@ -146,30 +145,6 @@ export class AgentCanvasClient {
 			const path = `/api/audit${qs.toString() ? `?${qs.toString()}` : ''}`
 			const res = await this.request<{ items: AuditEvent[] }>('GET', path)
 			return res.items
-		},
-	}
-
-	/* ---------------------------------------------------------- *
-	 * billing                                                     *
-	 * ---------------------------------------------------------- */
-
-	readonly billing = {
-		status: async (): Promise<BillingStatus> => {
-			return this.request<BillingStatus>('GET', '/api/billing/status')
-		},
-		checkoutSession: async (input: {
-			return_url: string
-			cancel_url: string
-			price_lookup_key?: string
-		}): Promise<{ url: string; session_id: string }> => {
-			return this.request<{ url: string; session_id: string }>(
-				'POST',
-				'/api/billing/checkout-session',
-				input
-			)
-		},
-		portalSession: async (input: { return_url: string }): Promise<{ url: string }> => {
-			return this.request<{ url: string }>('POST', '/api/billing/portal-session', input)
 		},
 	}
 

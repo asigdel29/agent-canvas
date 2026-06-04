@@ -35,10 +35,6 @@ describe('matchRoute — happy-path resolution', () => {
 		['POST', '/api/workspaces', 'workspaces/index'],
 		['GET', '/api/workspaces/ws_1/members', 'workspaces/members'],
 		['DELETE', '/api/workspaces/ws_1/members/usr_2', 'workspaces/members'],
-		['POST', '/api/billing/stripe-webhook', 'billing/stripe-webhook'],
-		['POST', '/api/billing/checkout-session', 'billing/checkout-session'],
-		['POST', '/api/billing/portal-session', 'billing/portal-session'],
-		['GET', '/api/billing/status', 'billing/status'],
 		['POST', '/api/admin/webhooks/drain', 'admin/webhooks/drain'],
 		['GET', '/api/cron/drain-webhooks', 'cron/drain-webhooks'],
 		['GET', '/api/webhooks', 'webhooks/index'],
@@ -46,7 +42,7 @@ describe('matchRoute — happy-path resolution', () => {
 		['DELETE', '/api/webhooks/whe_abc', 'webhooks/[id]'],
 		['POST', '/api/webhooks/ingest/github', 'webhooks/ingest/[provider]'],
 		['GET', '/api/oauth/github/start', 'oauth/[provider]/start'],
-		['GET', '/api/oauth/slack/callback', 'oauth/[provider]/callback'],
+		['GET', '/api/oauth/github/callback', 'oauth/[provider]/callback'],
 	]
 	it.each(cases)('%s %s → %s', (method, path, expected) => {
 		expect(id(method, path)).toBe(expected)

@@ -40,7 +40,6 @@ export type {
 	WebhookEndpointSummary,
 	IssuedWebhookEndpoint,
 	AuditEvent,
-	BillingStatus,
 	RunStartInput,
 	RunStartResult,
 } from './types.js'

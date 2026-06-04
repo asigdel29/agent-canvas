@@ -60,15 +60,6 @@ export interface AuditEvent {
 	readonly created_at: string
 }
 
-export interface BillingStatus {
-	readonly live: boolean
-	readonly status: string
-	readonly plan_lookup_key: string | null
-	readonly current_period_end: string | null
-	readonly cancel_at_period_end: boolean
-	readonly gate_enabled: boolean
-}
-
 export interface RunStartInput {
 	readonly agent_id: string
 	readonly room_id: string

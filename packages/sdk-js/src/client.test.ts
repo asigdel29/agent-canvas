@@ -142,39 +142,6 @@ describe('AgentCanvasClient.audit', () => {
 	})
 })
 
-describe('AgentCanvasClient.billing', () => {
-	it('status returns the BillingStatus shape', async () => {
-		const { fetch } = mockFetch({
-			status: 200,
-			body: {
-				live: true,
-				status: 'active',
-				plan_lookup_key: 'pro',
-				current_period_end: '2026-12-31T00:00:00Z',
-				cancel_at_period_end: false,
-				gate_enabled: true,
-			},
-		})
-		const c = new AgentCanvasClient({ base_url: BASE, token: TOKEN, fetchImpl: fetch })
-		const s = await c.billing.status()
-		expect(s.live).toBe(true)
-		expect(s.plan_lookup_key).toBe('pro')
-	})
-
-	it('checkoutSession returns the Stripe URL', async () => {
-		const { fetch } = mockFetch({
-			status: 200,
-			body: { url: 'https://checkout.stripe.com/x', session_id: 'cs_1' },
-		})
-		const c = new AgentCanvasClient({ base_url: BASE, token: TOKEN, fetchImpl: fetch })
-		const r = await c.billing.checkoutSession({
-			return_url: 'https://app/ok',
-			cancel_url: 'https://app/x',
-		})
-		expect(r.url).toBe('https://checkout.stripe.com/x')
-	})
-})
-
 describe('AgentCanvasClient.runs', () => {
 	it('start POSTs and returns run_id', async () => {
 		const { fetch } = mockFetch({

@@ -16,7 +16,6 @@
  * Hardened in earlier tiers:
  *   - Per-workspace membership check (P1)
  *   - Rate limit per user (P5; 30 starts/min)
- *   - SubscriptionGate when BILLING_GATE_ENABLED=true (P11)
  */
 
 import type { RoomId } from '@agent-canvas/orchestrator-types'
@@ -25,7 +24,6 @@ import { getRuntime } from '../../dist/index.js'
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import { withRateLimit } from '../../dist/rateLimit/withRateLimit.js'
-import { subscriptionGateFromEnv } from '../../dist/billing/subscriptionGate.js'
 import type { AgentId } from '../../dist/agents/agentRecord.js'
 import { AnthropicClient } from '../../dist/agents/anthropicClient.js'
 import { buildBrowserContribution } from '../../dist/agents/providers/browserProvider.js'
@@ -134,31 +132,6 @@ export default async function handler(req: Request): Promise<Response> {
 			return withCorsHeaders(req, jsonError(403, 'workspace_forbidden'))
 		}
 		throw err
-	}
-
-	// SubscriptionGate (P11). Transparent when BILLING_GATE_ENABLED
-	// is not 'true'; otherwise refuses with 402 when the workspace
-	// has no live subscription. We check AFTER the tenancy gate so
-	// the 402 surface doesn't leak workspace existence to non-members.
-	const billingStore = (runtime as unknown as {
-		billingStore?: import('../../dist/billing/billingStore.js').BillingStore
-	}).billingStore
-	if (billingStore) {
-		const gate = subscriptionGateFromEnv(billingStore)
-		const decision = await gate.check(agent.workspace_id)
-		if (!decision.allow) {
-			return withCorsHeaders(
-				req,
-				new Response(
-					JSON.stringify({
-						error: 'subscription_required',
-						reason: decision.reason,
-						status: decision.status,
-					}),
-					{ status: 402, headers: { 'content-type': 'application/json' } }
-				)
-			)
-		}
 	}
 
 	const run_id = newRunId()
