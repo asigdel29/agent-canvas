@@ -68,14 +68,10 @@ import {
 } from './layout/FloatingToolbar.js'
 import { ZoomCluster } from './layout/ZoomCluster.js'
 import { RoomEventClient, type RunEventPayload } from './sync/RoomEventClient.js'
+import { ORCHESTRATOR_URL } from './config.js'
 
 const SHAPE_UTILS = [AgentShapeUtil]
 const MAX_LIVE_EVENTS = 50
-
-const ORCHESTRATOR_URL =
-	(import.meta as unknown as { env?: Record<string, string> }).env?.[
-		'VITE_ORCHESTRATOR_URL'
-	] ?? 'http://localhost:3000'
 
 const SESSION_STORAGE_KEY = 'agent-canvas:session'
 const ROOM_STORAGE_KEY = 'agent-canvas:room'

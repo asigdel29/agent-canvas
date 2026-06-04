@@ -3,11 +3,11 @@
  *
  * The orchestrator ships as a set of handler modules under `handlers/`,
  * each exporting a default function that takes a Web `Request` and returns
- * a Web `Response`. In production a single Vercel catch-all
- * (`api/dispatch.ts`) routes every `/api/*` request to the matching
- * handler via the shared route table in `handlers/_router.ts`. This script
- * does the same thing locally on a plain Node http server, so the stack
- * can be exercised end-to-end without `vercel dev` or any external login.
+ * a Web `Response`. The production server (`scripts/server.ts`) routes
+ * every `/api/*` request to the matching handler via the shared route
+ * table in `handlers/_router.ts`. This script does the same thing for
+ * local development, adding the `/dev/*` helpers below, so the stack can
+ * be exercised end-to-end without any external login.
  *
  * Routes mirror the file layout under `handlers/`:
  *
@@ -43,17 +43,21 @@
  * deferring the failure to the first authenticated request.
  */
 
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { readFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { loadRoute } from '../handlers/_router.js'
+import {
+	loadDotEnvIfPresent,
+	nodeRequestToWebRequest,
+	writeWebResponseToNode,
+} from './httpBridge.js'
 
 import { signSession } from '../dist/auth/jwt.js'
 import { getRuntime } from '../dist/index.js'
 
-loadDotEnvLocalIfPresent()
+loadDotEnvIfPresent([resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env.local')])
 
 const PORT = Number(process.env['PORT'] ?? 3000)
 const REQUIRED = ['JWT_SECRET', 'SSE_TOKEN_SECRET'] as const
@@ -69,80 +73,10 @@ if (!process.env['ALLOWED_ORIGINS']) {
 	process.env['ALLOWED_ORIGINS'] = 'http://localhost:5173,http://localhost:5420'
 }
 
-// Route matching lives in handlers/_router.ts so the Vercel catch-all
-// (api/dispatch.ts) and the dev server share one table.
-
-async function nodeRequestToWebRequest(req: IncomingMessage): Promise<Request> {
-	// Reconstruct an absolute URL. Node IncomingMessage carries only the path.
-	const url = `http://${req.headers.host ?? `localhost:${PORT}`}${req.url ?? '/'}`
-	const headers = new Headers()
-	for (const [k, v] of Object.entries(req.headers)) {
-		if (v === undefined) continue
-		if (Array.isArray(v)) headers.set(k, v.join(','))
-		else headers.set(k, v)
-	}
-	// GET/HEAD must not have a body per the Fetch spec.
-	const method = req.method ?? 'GET'
-	const init: RequestInit = { method, headers }
-	if (method !== 'GET' && method !== 'HEAD') {
-		const chunks: Buffer[] = []
-		for await (const chunk of req) chunks.push(chunk as Buffer)
-		init.body = Buffer.concat(chunks)
-	}
-	return new Request(url, init)
-}
-
-async function writeWebResponseToNode(res: Response, out: ServerResponse): Promise<void> {
-	out.statusCode = res.status
-	res.headers.forEach((value, key) => out.setHeader(key, value))
-	if (!res.body) {
-		out.end()
-		return
-	}
-	// Stream the body so SSE works end-to-end.
-	const reader = res.body.getReader()
-	const decoder = new TextDecoder()
-	for (;;) {
-		const { value, done } = await reader.read()
-		if (done) break
-		out.write(typeof value === 'string' ? value : Buffer.from(value))
-	}
-	out.end()
-	void decoder // silence unused
-}
-
-/**
- * Best-effort .env.local loader. Parses KEY=VALUE lines, ignores blanks
- * and # comments. Does not interpret variable expansion or quoted
- * multilines — kept deliberately small. For anything richer the user
- * exports env vars before running.
- */
-function loadDotEnvLocalIfPresent(): void {
-	try {
-		// Anchor on the script's own location so the loader works regardless
-		// of where `npm run dev` was invoked from (repo root, workspace, etc).
-		const scriptDir = dirname(fileURLToPath(import.meta.url))
-		const path = resolve(scriptDir, '..', '.env.local')
-		const text = readFileSync(path, 'utf8')
-		for (const raw of text.split('\n')) {
-			const line = raw.trim()
-			if (line.length === 0 || line.startsWith('#')) continue
-			const eq = line.indexOf('=')
-			if (eq < 0) continue
-			const key = line.slice(0, eq).trim()
-			let value = line.slice(eq + 1).trim()
-			if (
-				(value.startsWith('"') && value.endsWith('"')) ||
-				(value.startsWith("'") && value.endsWith("'"))
-			) {
-				value = value.slice(1, -1)
-			}
-			if (!(key in process.env)) process.env[key] = value
-		}
-	} catch {
-		// .env.local optional. Caller can also export env vars directly.
-	}
-}
+// Route matching lives in handlers/_router.ts so the production server
+// (scripts/server.ts) and the dev server share one table. The Node ⇄ Web
+// request bridge and the .env loader live in ./httpBridge.ts so this
+// server and the production server share one copy.
 
 /**
  * POST /dev/mint-session — produce a session JWT for the caller-supplied
@@ -211,14 +145,14 @@ const server = createServer(async (rawReq, rawRes) => {
 
 	// Dev-only helpers first; they don't go through the auth middleware.
 	if (pathname === '/dev/mint-session') {
-		const webReq = await nodeRequestToWebRequest(rawReq)
+		const webReq = await nodeRequestToWebRequest(rawReq, PORT)
 		const webRes = await devMintSession(webReq)
 		await writeWebResponseToNode(webRes, rawRes)
 		return
 	}
 	const emitMatch = pathname.match(/^\/dev\/emit\/(.+)$/)
 	if (emitMatch) {
-		const webReq = await nodeRequestToWebRequest(rawReq)
+		const webReq = await nodeRequestToWebRequest(rawReq, PORT)
 		const webRes = await devEmit(webReq, emitMatch[1]!)
 		await writeWebResponseToNode(webRes, rawRes)
 		return
@@ -233,7 +167,7 @@ const server = createServer(async (rawReq, rawRes) => {
 	}
 
 	try {
-		const webReq = await nodeRequestToWebRequest(rawReq)
+		const webReq = await nodeRequestToWebRequest(rawReq, PORT)
 		const webRes = await handler(webReq)
 		await writeWebResponseToNode(webRes, rawRes)
 	} catch (err) {

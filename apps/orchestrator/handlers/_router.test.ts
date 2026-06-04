@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { matchRoute } from './_router.js'
 
 /**
- * The production catch-all (api/dispatch.ts) and the local dev server both
+ * The production server (scripts/server.ts) and the local dev server both
  * dispatch through this one table, so a wrong match ships a 404 (or worse,
  * the wrong handler) to every client. These tests pin the exact mapping —
  * especially the ordering traps where a specific route must win over a
  * greedy regex that would otherwise swallow it.
  *
  * matchRoute is used instead of loadRoute so no handler module is imported
- * (importing them would init postgres / Stripe / KMS without env vars).
+ * (importing them would init postgres / the vault without env vars).
  */
 
 const id = (method: string, path: string): string | null => matchRoute(method, path)?.id ?? null

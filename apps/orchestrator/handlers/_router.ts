@@ -2,19 +2,20 @@
  * Shared route table for the orchestrator's HTTP surface.
  *
  * The same matching logic runs in two places:
- *   - apps/orchestrator/api/dispatch.ts        (Vercel production catch-all)
- *   - apps/orchestrator/scripts/dev-server.ts  (local Node HTTP server)
+ *   - apps/orchestrator/scripts/server.ts      (production single process)
+ *   - apps/orchestrator/scripts/dev-server.ts  (local dev server)
  *
- * A single catch-all is used in production to fit inside Vercel's Hobby
- * 12-function ceiling: every /api/* request enters one Serverless Function
- * which then dispatches to the underlying handler module by path + method.
+ * Both run the handlers on a plain Node HTTP server: every /api/* request
+ * is matched here and dispatched to the underlying handler module by path
+ * + method.
  *
- * Handlers are imported lazily — eagerly importing all 29 would force
- * module init for postgres, KMS, Stripe, etc. at function cold start,
- * which hangs (and times out) when the corresponding env vars are absent.
+ * Handlers are imported lazily so that a request to one route does not
+ * force module init (postgres, vault, etc.) for every other handler.
  *
  * Matching is kept separate from loading (`matchRoute` vs `loadRoute`) so
  * the route table can be unit-tested without triggering those lazy imports.
+ *
+ * @author asigdel29
  */
 
 export type Handler = (req: Request) => Promise<Response>

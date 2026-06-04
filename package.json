@@ -18,6 +18,9 @@
     "dev": "concurrently --kill-others-on-fail --names 'orch,canvas' --prefix-colors 'magenta,cyan' 'npm:dev:orchestrator' 'npm:dev:canvas'",
     "dev:orchestrator": "npm run dev --workspace=@agent-canvas/orchestrator",
     "dev:canvas": "npm run dev --workspace=@agent-canvas/canvas",
+    "start": "node --import tsx apps/orchestrator/scripts/server.ts",
+    "migrate": "npm run migrate --workspace=@agent-canvas/orchestrator",
+    "setup": "./scripts/setup.sh",
     "setup:env": "node ./scripts/setup-env.mjs"
   },
   "devDependencies": {

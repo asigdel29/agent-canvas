@@ -24,6 +24,7 @@ import {
 	type McpServerRef,
 	defaultCapabilities,
 } from './capabilities.js'
+import { ORCHESTRATOR_URL } from '../config.js'
 
 export type ModelId =
 	| 'claude-opus-4-7'
@@ -672,10 +673,7 @@ function McpRow({
 			// Same authorization the rest of agentApi uses. We read the
 			// session JWT from sessionStorage directly here so this row
 			// doesn't need to be threaded through a context.
-			const orchestratorUrl =
-				(import.meta as unknown as { env?: Record<string, string> }).env?.[
-					'VITE_ORCHESTRATOR_URL'
-				] ?? 'http://localhost:3000'
+			const orchestratorUrl = ORCHESTRATOR_URL
 			const session =
 				(typeof window !== 'undefined' &&
 					window.sessionStorage.getItem('agent-canvas:session')) ||
