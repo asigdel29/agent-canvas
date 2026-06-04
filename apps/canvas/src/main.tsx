@@ -1,3 +1,9 @@
+/**
+ * Canvas client entry point — mounts <App> into the DOM.
+ *
+ * @author asigdel29
+ */
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App.js'

@@ -1,3 +1,9 @@
+/**
+ * Tests for runCurrentState.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { RunCurrentState, RunId } from '@agent-canvas/orchestrator-types'
 import {

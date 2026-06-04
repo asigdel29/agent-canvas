@@ -1,3 +1,9 @@
+/**
+ * Tests for tenancyStore.
+ *
+ * @author asigdel29
+ */
+
 import { afterEach, describe, expect, it } from 'vitest'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import { InMemoryTenancyStore } from './tenancyStore.js'

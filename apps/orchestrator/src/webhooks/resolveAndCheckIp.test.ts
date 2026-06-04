@@ -1,3 +1,9 @@
+/**
+ * Tests for resolveAndCheckIp.
+ *
+ * @author asigdel29
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resolveAndCheckIp } from './resolveAndCheckIp.js'
 

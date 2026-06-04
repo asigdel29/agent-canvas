@@ -1,3 +1,9 @@
+/**
+ * Tests for commandEndpoint.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { Command, RoomId, RunId, UserId } from '@agent-canvas/orchestrator-types'
 import { InMemoryAuditLog } from './auditLog.js'

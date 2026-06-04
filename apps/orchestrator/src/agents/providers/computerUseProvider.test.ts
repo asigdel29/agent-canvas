@@ -1,3 +1,9 @@
+/**
+ * Tests for computerUseProvider.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { buildComputerUseContribution } from './computerUseProvider.js'
 import type {

@@ -1,3 +1,9 @@
+/**
+ * Tests for eventLog.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { RunId } from '@agent-canvas/orchestrator-types'
 import { InMemoryEventLog } from './eventLog.js'

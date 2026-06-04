@@ -1,3 +1,9 @@
+/**
+ * Tests for sseToken.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import {
 	InMemoryNonceStore,

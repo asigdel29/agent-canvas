@@ -1,3 +1,9 @@
+/**
+ * Tests for workspaceAuditStore.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import {

@@ -1,3 +1,9 @@
+/**
+ * Tests for workflowTemplate.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import {
 	InMemoryWorkflowTemplateStore,

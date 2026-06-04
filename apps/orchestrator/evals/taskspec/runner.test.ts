@@ -1,3 +1,9 @@
+/**
+ * Tests for runner.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import { dirname } from 'node:path'

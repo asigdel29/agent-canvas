@@ -1,3 +1,9 @@
+/**
+ * Tests for idempotency.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import {
 	IdempotencyConflictError,

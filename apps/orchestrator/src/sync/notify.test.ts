@@ -1,3 +1,9 @@
+/**
+ * Tests for notify.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { channelForRoom } from './notify.js'
 

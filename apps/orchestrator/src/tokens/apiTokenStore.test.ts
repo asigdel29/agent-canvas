@@ -1,3 +1,9 @@
+/**
+ * Tests for apiTokenStore.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import { InMemoryApiTokenStore, mintRawToken } from './apiTokenStore.js'

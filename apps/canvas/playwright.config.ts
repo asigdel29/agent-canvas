@@ -1,3 +1,9 @@
+/**
+ * Playwright end-to-end test configuration for the canvas.
+ *
+ * @author asigdel29
+ */
+
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({

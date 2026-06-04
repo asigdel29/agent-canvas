@@ -1,3 +1,9 @@
+/**
+ * Tests for _oauth.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 import {
 	ConnectorRevokedError,

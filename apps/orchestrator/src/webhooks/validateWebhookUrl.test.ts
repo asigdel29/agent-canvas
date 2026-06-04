@@ -1,3 +1,9 @@
+/**
+ * Tests for validateWebhookUrl.
+ *
+ * @author asigdel29
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { validateWebhookUrl } from './validateWebhookUrl.js'
 

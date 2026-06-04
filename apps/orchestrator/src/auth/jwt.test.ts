@@ -1,3 +1,9 @@
+/**
+ * Tests for jwt.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { JwtVerificationError, signSession, verifySession } from './jwt.js'
 

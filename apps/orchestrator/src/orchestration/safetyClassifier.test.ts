@@ -1,3 +1,9 @@
+/**
+ * Tests for safetyClassifier.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import {
 	type Connector,

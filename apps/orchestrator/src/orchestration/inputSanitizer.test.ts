@@ -1,3 +1,9 @@
+/**
+ * Tests for inputSanitizer.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { InputSanitizer } from './inputSanitizer.js'
 

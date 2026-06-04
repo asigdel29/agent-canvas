@@ -1,3 +1,9 @@
+/**
+ * Tests for browserProvider.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { AgentId } from '../agentRecord.js'
 import { buildBrowserContribution } from './browserProvider.js'

@@ -1,3 +1,9 @@
+/**
+ * Tests for rateLimitStore.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 import {
 	InMemoryRateLimitStore,

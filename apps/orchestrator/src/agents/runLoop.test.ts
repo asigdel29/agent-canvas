@@ -1,3 +1,9 @@
+/**
+ * Tests for runLoop.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { RunEvent, RunId, RoomId } from '@agent-canvas/orchestrator-types'
 import {

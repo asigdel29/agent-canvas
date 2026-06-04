@@ -1,3 +1,9 @@
+/**
+ * Tests for session.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { signSession } from './jwt.js'
 import { extractSession } from './session.js'

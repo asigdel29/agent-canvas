@@ -1,3 +1,9 @@
+/**
+ * Tests for onboarding.
+ *
+ * @author asigdel29
+ */
+
 import { expect, test } from '@playwright/test'
 
 test.describe('first-run onboarding (E1 empty state)', () => {

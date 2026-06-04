@@ -1,3 +1,9 @@
+/**
+ * Tests for triggerRouter.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { NormalizedWebhookEvent } from '@agent-canvas/connector-core'
 import type { RoomId, UserId } from '@agent-canvas/orchestrator-types'

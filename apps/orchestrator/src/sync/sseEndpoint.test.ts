@@ -1,3 +1,9 @@
+/**
+ * Tests for sseEndpoint.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 import type { RoomId, RunEvent } from '@agent-canvas/orchestrator-types'
 import { InMemoryRoomEventBus } from './roomEventBus.js'

@@ -1,3 +1,9 @@
+/**
+ * Tests for verifyWebhook.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { createHmac } from 'node:crypto'
 import {

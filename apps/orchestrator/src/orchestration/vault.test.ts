@@ -1,3 +1,9 @@
+/**
+ * Tests for vault.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { VaultMintError } from '@agent-canvas/connector-core'
 import type { ProviderId, RunId, UserId } from '@agent-canvas/orchestrator-types'

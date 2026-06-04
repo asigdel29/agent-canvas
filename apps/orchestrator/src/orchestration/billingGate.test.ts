@@ -1,3 +1,9 @@
+/**
+ * Tests for billingGate.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { BillingGate, InMemoryBillingGateStore } from './billingGate.js'
 

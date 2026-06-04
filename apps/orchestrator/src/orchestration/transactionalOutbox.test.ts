@@ -1,3 +1,9 @@
+/**
+ * Tests for transactionalOutbox.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { RunEvent, RunId } from '@agent-canvas/orchestrator-types'
 import { InMemoryOutbox } from './transactionalOutbox.js'

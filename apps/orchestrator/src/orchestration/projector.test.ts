@@ -1,3 +1,9 @@
+/**
+ * Tests for projector.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { RoomId, RunEvent, RunId, Subscription } from '@agent-canvas/orchestrator-types'
 import {

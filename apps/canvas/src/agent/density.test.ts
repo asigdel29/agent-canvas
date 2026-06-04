@@ -1,3 +1,9 @@
+/**
+ * Tests for density.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import type { RunId } from '@agent-canvas/orchestrator-types'
 import { decideDensity } from './density.js'

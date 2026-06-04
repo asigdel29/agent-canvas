@@ -1,3 +1,9 @@
+/**
+ * Tests for runCoordinator.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { ConnectorRegistry } from '@agent-canvas/connector-core'
 import type { RunEvent, RunId, VendorId } from '@agent-canvas/orchestrator-types'

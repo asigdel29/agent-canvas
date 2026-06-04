@@ -1,3 +1,9 @@
+/**
+ * Tests for cors.
+ *
+ * @author asigdel29
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { corsHeadersFor, preflightResponse, readCorsConfig, withCorsHeaders } from './cors.js'
 

@@ -1,3 +1,9 @@
+/**
+ * Tests for runStateMachine.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { InvalidStateTransitionError } from '@agent-canvas/orchestrator-types'
 import { applyTransition } from './runStateMachine.js'

@@ -1,3 +1,9 @@
+/**
+ * Tests for mockProvider.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it } from 'vitest'
 import { VendorRateLimitError } from '@agent-canvas/connector-core'
 import { runProviderAdapterConformance } from '@agent-canvas/connector-core/conformance'

@@ -1,3 +1,9 @@
+/**
+ * Vite build and dev-server configuration for the canvas app.
+ *
+ * @author asigdel29
+ */
+
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 

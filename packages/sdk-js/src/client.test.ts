@@ -1,3 +1,9 @@
+/**
+ * Tests for client.
+ *
+ * @author asigdel29
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 import { AgentCanvasClient, ApiError } from './client.js'
 
