@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 import { InMemoryTenancyStore } from './tenancyStore.js'
 import {
@@ -242,6 +242,32 @@ describe('InMemoryTenancyStore', () => {
 			github_login: 'alice',
 		})
 		expect((await s.findUserByGithubLogin('  alice  '))?.id).toBe(u.id)
+	})
+})
+
+describe('requireMembership — AUTH_MODE=open', () => {
+	const NON_MEMBER: UserId = 'u_stranger' as UserId
+	const WS: WorkspaceId = 'ws_shared' as WorkspaceId
+
+	afterEach(() => {
+		delete process.env['AUTH_MODE']
+	})
+
+	it('throws for a non-member when open mode is off', async () => {
+		delete process.env['AUTH_MODE']
+		const s = new InMemoryTenancyStore()
+		await expect(s.requireMembership(NON_MEMBER, WS, 'member')).rejects.toBeInstanceOf(
+			TenancyForbiddenError
+		)
+	})
+
+	it('grants any user owner access when open mode is on', async () => {
+		process.env['AUTH_MODE'] = 'open'
+		const s = new InMemoryTenancyStore()
+		const m = await s.requireMembership(NON_MEMBER, WS, 'admin')
+		expect(m.role).toBe('owner')
+		expect(m.user_id).toBe(NON_MEMBER)
+		expect(m.workspace_id).toBe(WS)
 	})
 })
 

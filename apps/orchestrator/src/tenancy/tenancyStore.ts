@@ -39,6 +39,27 @@ import {
 	TenancyNotFoundError,
 } from './tenancyTypes.js'
 
+/**
+ * Synthetic membership for AUTH_MODE=open deployments.
+ *
+ * Open mode targets a single trusted internal team behind its own
+ * network boundary, so there is no per-workspace tenant isolation: every
+ * authenticated session is treated as an owner of every workspace. When
+ * open mode is off this returns null and `requireMembership` falls
+ * through to the real membership check.
+ *
+ * @param user_id      the requesting user.
+ * @param workspace_id the workspace being accessed.
+ * @returns an owner `MembershipRecord` in open mode, otherwise null.
+ */
+function openModeMembership(
+	user_id: UserId,
+	workspace_id: WorkspaceId
+): MembershipRecord | null {
+	if (process.env['AUTH_MODE'] !== 'open') return null
+	return { workspace_id, user_id, role: 'owner', joined_at: new Date().toISOString() }
+}
+
 export interface WorkspaceListEntry {
 	readonly workspace: WorkspaceRecord
 	readonly role: WorkspaceRole
@@ -248,6 +269,8 @@ export class InMemoryTenancyStore implements TenancyStore {
 		workspace_id: WorkspaceId,
 		minRole: WorkspaceRole
 	): Promise<MembershipRecord> {
+		const open = openModeMembership(user_id, workspace_id)
+		if (open) return open
 		const m = await this.getMembership(user_id, workspace_id)
 		if (!m) throw new TenancyForbiddenError(user_id, workspace_id, minRole)
 		if (!roleAtLeast(m.role, minRole)) {
@@ -484,6 +507,8 @@ export class PostgresTenancyStore implements TenancyStore {
 		workspace_id: WorkspaceId,
 		minRole: WorkspaceRole
 	): Promise<MembershipRecord> {
+		const open = openModeMembership(user_id, workspace_id)
+		if (open) return open
 		const m = await this.getMembership(user_id, workspace_id)
 		if (!m) throw new TenancyForbiddenError(user_id, workspace_id, minRole)
 		if (!roleAtLeast(m.role, minRole)) {

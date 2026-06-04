@@ -47,6 +47,16 @@ const routes: Route[] = [
 		load: () => import('./auth/sse-token.js'),
 	},
 	{
+		id: 'auth/config',
+		match: exact('/api/auth/config', ['GET']),
+		load: () => import('./auth/config.js'),
+	},
+	{
+		id: 'auth/anon-session',
+		match: exact('/api/auth/anon-session', ['POST']),
+		load: () => import('./auth/anon-session.js'),
+	},
+	{
 		id: 'auth/login/github',
 		match: exact('/api/auth/login/github', ['GET']),
 		load: () => import('./auth/login/github.js'),

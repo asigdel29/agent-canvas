@@ -2,22 +2,28 @@
  * Login — full-viewport sign-in screen rendered when no session is
  * present.
  *
- * Single primary action: Sign in with GitHub. The button hands off
- * to the orchestrator's /api/auth/login/github route, which mints a
- * state JWT and redirects to GitHub. On successful callback the
- * orchestrator redirects back to this origin with ?session=&room=
- * which App's intakeAndStashCredentials picks up.
+ * The action adapts to the deployment's auth mode, fetched once from
+ * GET /api/auth/config:
+ *
+ *   github (default)  Single action: Sign in with GitHub. The button
+ *                     hands off to /api/auth/login/github, which mints a
+ *                     state JWT and redirects to GitHub. On success the
+ *                     orchestrator redirects back with ?session=&room=.
+ *   open              Trusted internal deploy: a teammate joins with just
+ *                     a display name via POST /api/auth/anon-session. No
+ *                     external login. The returned session + room are put
+ *                     on the URL exactly as the GitHub callback does, so
+ *                     App's intakeAndStashCredentials handles both paths
+ *                     identically.
  *
  * Visual model: centered card on the dark surface, generous padding,
- * Framer-pink accent on the mark, single line of small print under
- * the button so the user knows what scope GitHub will ask for.
+ * Framer-pink accent on the mark. The component owns its auth-mode fetch
+ * but is otherwise driven by the orchestrator URL passed in from App.
  *
- * The component is presentation-only. The orchestrator URL is
- * passed in from App so this file remains agnostic to environment
- * configuration.
+ * @author asigdel29
  */
 
-import { useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { track } from '../analytics/posthog.js'
 
 export interface LoginProps {
@@ -29,8 +35,13 @@ export interface LoginProps {
 	readonly cancelled?: boolean
 }
 
+type AuthMode = 'loading' | 'github' | 'open'
+
 export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 	const [loading, setLoading] = useState(false)
+	const [mode, setMode] = useState<AuthMode>('loading')
+	const [handle, setHandle] = useState('')
+	const [joinError, setJoinError] = useState<string | null>(null)
 
 	useEffect(() => {
 		// If the URL has the cancelled flag, strip it so a refresh
@@ -42,12 +53,61 @@ export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 		}
 	}, [cancelled])
 
+	useEffect(() => {
+		// Resolve the deployment's auth mode. Any failure falls back to
+		// the GitHub flow — the safe default that never exposes open join.
+		let cancelledFetch = false
+		fetch(`${orchestratorUrl}/api/auth/config`)
+			.then((r) => (r.ok ? r.json() : { auth_mode: 'github' }))
+			.then((cfg: { auth_mode?: string }) => {
+				if (!cancelledFetch) setMode(cfg.auth_mode === 'open' ? 'open' : 'github')
+			})
+			.catch(() => {
+				if (!cancelledFetch) setMode('github')
+			})
+		return () => {
+			cancelledFetch = true
+		}
+	}, [orchestratorUrl])
+
 	function handleSignIn() {
 		setLoading(true)
 		track('login_started', { provider: 'github' })
 		const url = new URL(`${orchestratorUrl}/api/auth/login/github`)
 		url.searchParams.set('redirect_to', window.location.origin + '/')
 		window.location.href = url.toString()
+	}
+
+	async function handleJoin(event: FormEvent) {
+		event.preventDefault()
+		setLoading(true)
+		setJoinError(null)
+		track('login_started', { provider: 'open' })
+		try {
+			const res = await fetch(`${orchestratorUrl}/api/auth/anon-session`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ handle }),
+			})
+			if (!res.ok) {
+				setJoinError('Could not join. Check with whoever set up this workspace.')
+				setLoading(false)
+				return
+			}
+			const data = (await res.json()) as { session: string; room: string; workspace_id: string }
+			// Hand off through the URL exactly like the GitHub callback, so
+			// App's intake logic stashes the session and strips the params.
+			const dest = new URL(window.location.origin + '/')
+			dest.searchParams.set('session', data.session)
+			dest.searchParams.set('room', data.room)
+			dest.searchParams.set('workspace_id', data.workspace_id)
+			dest.searchParams.set('login_provider', 'open')
+			dest.searchParams.set('login_handle', handle)
+			window.location.href = dest.toString()
+		} catch {
+			setJoinError('Could not reach the orchestrator. Is it running?')
+			setLoading(false)
+		}
 	}
 
 	return (
@@ -115,30 +175,85 @@ export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 					</div>
 				)}
 
-				<button
-					type="button"
-					onClick={handleSignIn}
-					disabled={loading}
-					style={{
-						display: 'inline-flex',
-						alignItems: 'center',
-						justifyContent: 'center',
-						gap: 'var(--space-2)',
-						height: 44,
-						padding: '0 var(--space-4)',
-						background: loading ? 'var(--surface-sunk)' : 'var(--text-strong)',
-						color: loading ? 'var(--text-muted)' : '#0A0A0A',
-						border: 'none',
-						borderRadius: 'var(--radius-md)',
-						fontFamily: 'var(--font-ui)',
-						fontSize: 'var(--font-14)',
-						fontWeight: 500,
-						cursor: loading ? 'not-allowed' : 'pointer',
-					}}
-				>
-					<GitHubMark />
-					{loading ? 'Redirecting to GitHub…' : 'Sign in with GitHub'}
-				</button>
+				{mode === 'open' ? (
+					<form onSubmit={handleJoin} style={{ display: 'grid', gap: 'var(--space-3)' }}>
+						<input
+							type="text"
+							value={handle}
+							onChange={(e) => setHandle(e.target.value)}
+							placeholder="Your name"
+							aria-label="Your name"
+							autoFocus
+							maxLength={40}
+							style={{
+								height: 44,
+								padding: '0 var(--space-3)',
+								background: 'var(--surface-sunk)',
+								color: 'var(--text-strong)',
+								border: '1px solid var(--border)',
+								borderRadius: 'var(--radius-md)',
+								fontFamily: 'var(--font-ui)',
+								fontSize: 'var(--font-14)',
+							}}
+						/>
+						<button
+							type="submit"
+							disabled={loading || handle.trim().length === 0}
+							style={{
+								height: 44,
+								padding: '0 var(--space-4)',
+								background:
+									loading || handle.trim().length === 0
+										? 'var(--surface-sunk)'
+										: 'var(--text-strong)',
+								color:
+									loading || handle.trim().length === 0
+										? 'var(--text-muted)'
+										: '#0A0A0A',
+								border: 'none',
+								borderRadius: 'var(--radius-md)',
+								fontFamily: 'var(--font-ui)',
+								fontSize: 'var(--font-14)',
+								fontWeight: 500,
+								cursor:
+									loading || handle.trim().length === 0 ? 'not-allowed' : 'pointer',
+							}}
+						>
+							{loading ? 'Joining…' : 'Join the workspace'}
+						</button>
+						{joinError && (
+							<p style={{ margin: 0, fontSize: 'var(--font-12)', color: 'var(--live)' }}>
+								{joinError}
+							</p>
+						)}
+					</form>
+				) : (
+					<button
+						type="button"
+						onClick={handleSignIn}
+						disabled={loading || mode === 'loading'}
+						style={{
+							display: 'inline-flex',
+							alignItems: 'center',
+							justifyContent: 'center',
+							gap: 'var(--space-2)',
+							height: 44,
+							padding: '0 var(--space-4)',
+							background:
+								loading || mode === 'loading' ? 'var(--surface-sunk)' : 'var(--text-strong)',
+							color: loading || mode === 'loading' ? 'var(--text-muted)' : '#0A0A0A',
+							border: 'none',
+							borderRadius: 'var(--radius-md)',
+							fontFamily: 'var(--font-ui)',
+							fontSize: 'var(--font-14)',
+							fontWeight: 500,
+							cursor: loading || mode === 'loading' ? 'not-allowed' : 'pointer',
+						}}
+					>
+						<GitHubMark />
+						{loading ? 'Redirecting to GitHub…' : 'Sign in with GitHub'}
+					</button>
+				)}
 
 				<footer
 					style={{
@@ -148,12 +263,21 @@ export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 						lineHeight: 1.5,
 					}}
 				>
-					We request <code style={{ fontFamily: 'var(--font-mono)' }}>read:user</code> and{' '}
-					<code style={{ fontFamily: 'var(--font-mono)' }}>user:email</code> from GitHub —
-					only enough to identify you. No repos read, no code written.
+					{mode === 'open' ? (
+						<>
+							Internal workspace — pick a name your teammates will recognize. Your
+							Claude key stays in this browser; no account required.
+						</>
+					) : (
+						<>
+							We request <code style={{ fontFamily: 'var(--font-mono)' }}>read:user</code> and{' '}
+							<code style={{ fontFamily: 'var(--font-mono)' }}>user:email</code> from GitHub —
+							only enough to identify you. No repos read, no code written.
+						</>
+					)}
 					<br />
 					<br />
-					By signing in you agree to the{' '}
+					By continuing you agree to the{' '}
 					<a
 						href="/tos"
 						style={{ color: 'var(--accent)', textDecoration: 'underline' }}
