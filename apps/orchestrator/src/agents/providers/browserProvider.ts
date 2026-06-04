@@ -46,6 +46,7 @@
  * Failure mode: any tool that throws (Playwright timeout, selector
  * not found, navigation aborted) returns ToolResult.error with the
  * underlying message. The model sees it and revises the plan.
+ * @author asigdel29
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'

@@ -20,6 +20,7 @@
  * After attempt 8 we mark failed_at. Customers needing higher
  * delivery durability can replay from the audit log; the queue is
  * not a long-term store.
+ * @author asigdel29
  */
 
 import { randomUUID } from 'node:crypto'

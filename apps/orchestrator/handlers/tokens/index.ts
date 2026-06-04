@@ -5,6 +5,7 @@
  * Session-only. We deliberately reject API tokens from
  * authenticating this endpoint — a token cannot be used to mint
  * another token, mirroring how GitHub PATs cannot create PATs.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

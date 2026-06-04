@@ -13,6 +13,7 @@
  *
  * This is not a general-purpose JWT library — only the subset the
  * orchestrator needs.
+ * @author asigdel29
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto'

@@ -26,6 +26,7 @@
  *   - Allowlist of event names. Adding a new event means editing
  *     the EventName union; ad-hoc string events are not allowed.
  *     This keeps the funnel inspectable and the schema stable.
+ * @author asigdel29
  */
 
 const POSTHOG_HOST = 'https://us.i.posthog.com'

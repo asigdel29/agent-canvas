@@ -13,6 +13,7 @@
  *
  * Both no-op on non-terminal runs to prevent accidental hiding of
  * in-flight work.
+ * @author asigdel29
  */
 
 import { isTerminal, type RunCurrentState, type RunId } from '@agent-canvas/orchestrator-types'

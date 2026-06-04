@@ -13,6 +13,7 @@
  * In-memory implementation here is correct-by-construction for tests.
  * Production wires Postgres LISTEN/NOTIFY on the outbox table for
  * low-latency drain.
+ * @author asigdel29
  */
 
 import type { RunEvent, RunId } from '@agent-canvas/orchestrator-types'

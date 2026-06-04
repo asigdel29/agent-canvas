@@ -13,6 +13,7 @@
  * prefix tldraw requires). This makes lookups O(1) when an event
  * arrives for an agent: the canvas knows exactly which shape to
  * update.
+ * @author asigdel29
  */
 
 import type { AgentShapeProps } from './AgentShapeUtil.js'

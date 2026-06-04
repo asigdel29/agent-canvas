@@ -25,6 +25,7 @@
  *   from err automatically, so callers do not stringify by hand.
  *   The errorReporter (Sentry-shape) sees the same object via
  *   its own hook.
+ * @author asigdel29
  */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'

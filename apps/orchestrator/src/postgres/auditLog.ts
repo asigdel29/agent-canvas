@@ -4,6 +4,7 @@
  * Append-only. Queries by run, user, or room, each ordered most-recent
  * first via the indexes in 001_init.sql. Retention policy enforced
  * out-of-band; this adapter just reads/writes.
+ * @author asigdel29
  */
 
 import type {

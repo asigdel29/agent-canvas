@@ -11,6 +11,7 @@
  *
  * The `postgres` library handles connection pooling and prepared
  * statements; we just hand it the URL.
+ * @author asigdel29
  */
 
 import postgres from 'postgres'

@@ -20,6 +20,7 @@
  *               failed ◀──────────┴────▶ cancelled
  *
  *   Terminal: succeeded · failed · cancelled · unreachable
+ * @author asigdel29
  */
 
 // ─────────────────────────────────────────────────────────────────────

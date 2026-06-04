@@ -13,6 +13,7 @@
  * separators, hover highlight that lifts the row without a border.
  * Selected row gets the accent-soft tint plus a 2px accent strip on
  * the left edge.
+ * @author asigdel29
  */
 
 import { useState } from 'react'

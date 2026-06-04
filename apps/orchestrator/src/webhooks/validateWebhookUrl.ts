@@ -22,6 +22,7 @@
  * resolution and abort the request when the resolved address
  * lands in a private range. Foundation here is the lexical
  * defense; the resolution defense ships with the worker.
+ * @author asigdel29
  */
 
 const PRIVATE_V4_RANGES: ReadonlyArray<[number, number, number, number]> = [

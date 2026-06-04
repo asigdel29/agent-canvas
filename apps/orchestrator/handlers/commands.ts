@@ -11,6 +11,7 @@
  *
  * Response: 200 with { seq, deduped, trace_id } on success.
  *          4xx with { error: 'rejection_reason' } on rejection.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../dist/index.js'

@@ -11,6 +11,7 @@
  * collapses to a 1.5s confirmation banner then auto-closes.
  *
  * Escape closes; backdrop click closes; Cmd/Ctrl+Enter submits.
+ * @author asigdel29
  */
 
 import { useEffect, useState } from 'react'

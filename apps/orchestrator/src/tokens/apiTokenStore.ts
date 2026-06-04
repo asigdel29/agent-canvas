@@ -20,6 +20,7 @@
  * Tokens are workspace-scoped at issue time. The verify() result
  * carries the workspace_id so the API route can call
  * TenancyStore.requireMembership directly with no extra lookup.
+ * @author asigdel29
  */
 
 import { createHash, randomBytes } from 'node:crypto'

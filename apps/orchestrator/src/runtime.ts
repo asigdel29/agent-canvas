@@ -11,6 +11,7 @@
  *
  * Connector registry installs the GitHub connector + a MockProvider
  * for local-only smoke testing.
+ * @author asigdel29
  */
 
 import { ConnectorRegistry } from '@agent-canvas/connector-core'

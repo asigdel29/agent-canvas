@@ -5,6 +5,7 @@
  * Validates the `state` parameter against the signed cookie set by
  * /start (CSRF defense). Real token exchange lands in the per-adapter
  * follow-up PRs.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../../dist/index.js'

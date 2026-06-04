@@ -17,6 +17,7 @@
  *   - PII scrubbing pipeline (we currently send err.message verbatim)
  *   - release/environment tags from VERCEL_GIT_COMMIT_SHA + NODE_ENV
  *   - breadcrumbs (currently single-event reports only)
+ * @author asigdel29
  */
 
 const DEFAULT_DSN = process.env['SENTRY_DSN'] ?? ''

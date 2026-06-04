@@ -14,6 +14,7 @@
  *
  * UI is deliberately minimal — no search box, no avatars. The
  * settings page is the place for membership management.
+ * @author asigdel29
  */
 
 import { useEffect, useState } from 'react'

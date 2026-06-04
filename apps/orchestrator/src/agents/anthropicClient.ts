@@ -22,6 +22,7 @@
  *   AnthropicRequestError   4xx other — caller's fault, do not retry
  *
  * All four extend a single AnthropicError so callers can catch broad.
+ * @author asigdel29
  */
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'

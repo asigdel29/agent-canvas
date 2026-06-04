@@ -16,6 +16,7 @@
  * submits. Keyboard-trap inside the modal is delegated to the
  * native dialog element via the focus-loop helpers in `useFocusTrap`
  * (kept inline here so the modal stays self-contained).
+ * @author asigdel29
  */
 
 import { useEffect, useId, useRef, useState } from 'react'

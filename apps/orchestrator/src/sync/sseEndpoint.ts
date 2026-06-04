@@ -15,6 +15,7 @@
  *                     (Vercel function timeout is 300 s; we cut at 270 s
  *                     so the client reconnects before the platform tears
  *                     us down)
+ * @author asigdel29
  */
 
 import type { RoomId } from '@agent-canvas/orchestrator-types'

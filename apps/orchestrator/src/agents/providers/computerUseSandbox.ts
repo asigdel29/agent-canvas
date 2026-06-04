@@ -30,6 +30,7 @@
  *
  * Implementations MUST be idempotent on kill() because catalog
  * teardown can fire twice on the failure path.
+ * @author asigdel29
  */
 
 export interface Point {

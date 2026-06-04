@@ -18,6 +18,7 @@
  * means we process ~960 deliveries/hour worst case before exhausting
  * the 60s function budget; in practice the queue clears in a few
  * batches and the rest of the minute is idle.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

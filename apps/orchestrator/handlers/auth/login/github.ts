@@ -34,6 +34,7 @@
  *                                Defaults to the request's own origin,
  *                                which works locally but not behind a
  *                                proxy where the public URL differs.
+ * @author asigdel29
  */
 
 import { signSession } from '../../../dist/auth/jwt.js'

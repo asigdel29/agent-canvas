@@ -14,6 +14,7 @@
  * pre-sorted shape so a paginating client can use the last row's
  * created_at as a cursor (P7 ships keyset pagination as a deferred
  * follow-up; for foundation, limit+offset is fine).
+ * @author asigdel29
  */
 
 import { randomUUID } from 'node:crypto'

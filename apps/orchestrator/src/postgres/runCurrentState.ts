@@ -11,6 +11,7 @@
  * Without that predicate, a delayed re-apply of an old event silently
  * downgrades state. Tests on the in-memory implementation enforce the
  * same semantics; this adapter ports them to SQL.
+ * @author asigdel29
  */
 
 import type {

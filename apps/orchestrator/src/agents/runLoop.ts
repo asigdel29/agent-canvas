@@ -40,6 +40,7 @@
  *     this module just records token counts.
  *   - Retries on AnthropicServerError or RateLimitError. Caller
  *     wraps with a retry policy.
+ * @author asigdel29
  */
 
 import { randomUUID } from 'node:crypto'

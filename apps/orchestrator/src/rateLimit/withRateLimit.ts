@@ -16,6 +16,7 @@
  *
  * Header set follows the IETF "RateLimit" draft (the X-RateLimit-*
  * family is the convention every public API has shipped for years).
+ * @author asigdel29
  */
 
 import type { RateLimitStore } from './rateLimitStore.js'

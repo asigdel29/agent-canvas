@@ -12,6 +12,7 @@
  *   describe('GitHub adapter conformance', () => {
  *     runConnectorConformance(new GitHubConnector())
  *   })
+ * @author asigdel29
  */
 
 import { describe, expect, it } from 'vitest'

@@ -20,6 +20,7 @@
  *
  * Constant-time HMAC compare via timingSafeEqual; a wrong byte
  * does not leak through latency.
+ * @author asigdel29
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto'

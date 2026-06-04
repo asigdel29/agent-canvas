@@ -11,6 +11,7 @@
  * Each card uses the live-soft tint when the underlying action is
  * irreversible — destructive-but-recoverable stays neutral so the
  * eye learns to read the pink tint as "no undo".
+ * @author asigdel29
  */
 
 export interface ApprovalCard {

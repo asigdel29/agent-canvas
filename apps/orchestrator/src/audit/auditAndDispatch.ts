@@ -17,6 +17,7 @@
  * promise and continue. Errors are swallowed; neither write blocks
  * the user's response. The audit row's id is reused as the webhook
  * event_id so a downstream consumer can correlate them.
+ * @author asigdel29
  */
 
 import { dispatchWebhook } from '../webhooks/dispatchWebhook.js'

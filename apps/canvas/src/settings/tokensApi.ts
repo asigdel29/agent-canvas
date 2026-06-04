@@ -2,6 +2,7 @@
  * Thin client for /api/tokens. Mirrors the SDK shape but lives in
  * the canvas because the canvas calls the orchestrator via session
  * JWT, not an API token.
+ * @author asigdel29
  */
 
 export type ApiTokenScope = 'read' | 'write'

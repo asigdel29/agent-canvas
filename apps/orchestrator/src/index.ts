@@ -11,6 +11,7 @@
  *                        command endpoint, budget gate, input sanitizer
  *   src/connectors/      the GitHub connector + the connector framework
  *   evals/               adversarial eval suite for the taskSpec prompt
+ * @author asigdel29
  */
 
 export { applyTransition, NotImplementedError } from './orchestration/runStateMachine.js'

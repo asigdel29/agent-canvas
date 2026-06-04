@@ -10,6 +10,7 @@
  *
  * Auth posture: every API call is session-only (the bearer header
  * holds the session JWT). Errors surface inline; we do not toast.
+ * @author asigdel29
  */
 
 import { useEffect, useState } from 'react'

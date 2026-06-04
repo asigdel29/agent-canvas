@@ -8,6 +8,7 @@
  *
  * Format: 00-<32 hex trace_id>-<16 hex span_id>-<2 hex flags>
  * Spec:   https://www.w3.org/TR/trace-context/
+ * @author asigdel29
  */
 
 const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/

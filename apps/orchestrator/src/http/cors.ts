@@ -12,6 +12,7 @@
  *   return cors  // already includes the request-specific headers
  *
  * Preflight (OPTIONS) requests get a dedicated 204 response.
+ * @author asigdel29
  */
 
 const HEADERS_ALLOWED =

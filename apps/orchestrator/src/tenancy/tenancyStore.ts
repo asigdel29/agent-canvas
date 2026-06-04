@@ -20,6 +20,7 @@
  *   - ensureSoloWorkspace is no-op when the user already has any
  *     workspace where they are owner
  *   - all three are safe to call on every login
+ * @author asigdel29
  */
 
 import { randomUUID } from 'node:crypto'

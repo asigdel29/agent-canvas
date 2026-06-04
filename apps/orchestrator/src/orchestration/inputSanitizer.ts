@@ -21,6 +21,7 @@
  * NOTE: input sanitization is necessary but not sufficient. Eval
  * fixtures in apps/orchestrator/evals/taskspec/injection/ cover the
  * adversarial corpus; they are the regression test for this module.
+ * @author asigdel29
  */
 
 const ZERO_WIDTH_RE = /[​-‍⁠﻿]/g

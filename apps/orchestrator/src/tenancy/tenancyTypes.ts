@@ -15,6 +15,7 @@
  *
  * The numeric levels in ROLE_RANK are the source of truth for
  * "is role A at least as privileged as role B" comparisons.
+ * @author asigdel29
  */
 
 import type { UserId } from '@agent-canvas/orchestrator-types'

@@ -9,6 +9,7 @@
  * The InMemoryIdempotencyStore is suitable for tests. Production uses a
  * Postgres UNIQUE(idempotency_key) constraint with INSERT ... ON CONFLICT
  * DO NOTHING returning whether the insert was new.
+ * @author asigdel29
  */
 
 export interface IdempotencyStore {

@@ -41,6 +41,7 @@
  *
  * Throws on startup if a required env var is unset — fails-fast over
  * deferring the failure to the first authenticated request.
+ * @author asigdel29
  */
 
 import { createServer } from 'node:http'

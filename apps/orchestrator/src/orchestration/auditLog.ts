@@ -8,6 +8,7 @@
  * Schema is intentionally narrow: actor, room, run, action, result,
  * trace_id, optional subscription provenance, free-form details. Each
  * row is append-only.
+ * @author asigdel29
  */
 
 import type { AuditEntry, RoomId, RunId, UserId } from '@agent-canvas/orchestrator-types'

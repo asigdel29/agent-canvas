@@ -12,6 +12,7 @@
  * audit actions plus a top "All events (*)" toggle. Wildcard is
  * the default for foundation (matches what most receivers want);
  * exact subscriptions cut delivery cost for high-traffic events.
+ * @author asigdel29
  */
 
 import { useEffect, useState } from 'react'

@@ -15,6 +15,7 @@
  * store is pluggable: production uses Upstash Redis (atomic SET NX EX
  * across all serverless instances); dev uses an in-memory FIFO. Both
  * implement `NonceStore`. See `runtime.ts` for selection.
+ * @author asigdel29
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'

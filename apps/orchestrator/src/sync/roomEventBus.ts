@@ -8,6 +8,7 @@
  * Each event published to a room is delivered to every active
  * subscriber for that room exactly once. Listener exceptions never
  * abort dispatch to other listeners.
+ * @author asigdel29
  */
 
 import type { RoomId, RunEvent } from '@agent-canvas/orchestrator-types'

@@ -7,6 +7,7 @@
  *
  * The default fetch is the global one; tests pass an injected fetch
  * that returns fixture responses.
+ * @author asigdel29
  */
 
 import {

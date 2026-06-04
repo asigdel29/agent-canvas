@@ -8,6 +8,7 @@
  *
  * NOT used in production; the two real providers (Codex, OpenHands)
  * live in this same directory as separate adapters.
+ * @author asigdel29
  */
 
 import type {

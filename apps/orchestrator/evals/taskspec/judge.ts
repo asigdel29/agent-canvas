@@ -15,6 +15,7 @@
  *
  * Categories: happy / injection / oversize / multilingual / encoding /
  * empty / quality.
+ * @author asigdel29
  */
 
 import type { TaskSpec } from '../../src/orchestration/taskSpec.js'

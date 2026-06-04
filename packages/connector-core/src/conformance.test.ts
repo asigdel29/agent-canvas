@@ -2,6 +2,7 @@
  * Meta-test: prove the conformance suite catches drift by running it
  * against a hand-built minimal Connector / ProviderAdapter. The 8 real
  * adapters import the same suite from their own test files.
+ * @author asigdel29
  */
 
 import { describe, expect, it } from 'vitest'

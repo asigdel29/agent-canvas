@@ -16,6 +16,7 @@
  *         → projector writes to canvas projection
  *
  * The projection sink at the end captures the canvas-visible writes.
+ * @author asigdel29
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'

@@ -15,6 +15,7 @@
  * (e.g. resolving approvals is intentionally session-only — a
  * CLI should not be able to approve a destructive call on the
  * operator's behalf).
+ * @author asigdel29
  */
 
 import type { UserId } from '@agent-canvas/orchestrator-types'

@@ -12,6 +12,7 @@
  * Production uses LISTEN/NOTIFY on outbox inserts to drive near-real-
  * time fan-out. Phase 0 research doc settled on this pattern for the
  * Vercel-native sync backend.
+ * @author asigdel29
  */
 
 import type { RunEvent, RunId } from '@agent-canvas/orchestrator-types'

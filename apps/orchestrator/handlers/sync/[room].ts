@@ -10,6 +10,7 @@
  *
  * The stream lives ~270 s before the orchestrator emits a `reconnect`
  * hint and closes; the canvas mints a fresh SSE token and reconnects.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

@@ -20,6 +20,7 @@
  *   - NoCompatibleVendor: append a `failed` event with reason.
  *   - Vendor 5xx / timeout: bounded retry; the next drain catches
  *     un-acked queued events.
+ * @author asigdel29
  */
 
 import {

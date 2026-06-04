@@ -10,6 +10,7 @@
  * SELECT first; if found, return existing seq with deduped=true.
  * Otherwise INSERT with seq = COALESCE(MAX(seq), 0) + 1 inside the
  * advisory-locked transaction.
+ * @author asigdel29
  */
 
 import type {

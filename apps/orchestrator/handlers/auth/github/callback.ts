@@ -22,6 +22,7 @@
  *   GITHUB_OAUTH_CLIENT_SECRET   GitHub OAuth app client secret
  *   JWT_SECRET                   session JWT HMAC secret
  *   AUTH_STATE_SECRET            HMAC for the state JWT we minted
+ * @author asigdel29
  */
 
 import { signSession, verifySession } from '../../../dist/auth/jwt.js'

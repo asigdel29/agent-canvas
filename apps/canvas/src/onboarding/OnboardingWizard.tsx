@@ -14,6 +14,7 @@
  * State machine is local; the parent receives the wizard output
  * (connected provider, daily budget micros) via onComplete and is
  * responsible for forwarding it to the orchestrator.
+ * @author asigdel29
  */
 
 import { useState } from 'react'

@@ -8,6 +8,7 @@
  * Webhook idempotency: `X-GitHub-Delivery` header (UUID per delivery).
  * Signature: HMAC-SHA256 with the app's webhook secret, sent as
  * `X-Hub-Signature-256`.
+ * @author asigdel29
  */
 
 import type {

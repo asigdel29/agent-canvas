@@ -5,6 +5,7 @@
  * Used by the canvas ApprovalInbox on first paint. Live updates
  * after that arrive through the existing SSE room bus
  * (approval_required events).
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

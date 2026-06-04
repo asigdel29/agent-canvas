@@ -17,6 +17,7 @@
  * Response on POST is 201 with { record, signing_secret }. The
  * signing_secret never appears in a subsequent GET — copy it now or
  * lose it and re-create the endpoint.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

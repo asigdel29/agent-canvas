@@ -19,6 +19,7 @@
  * worker: customers want to verify the same way we sign. Exporting
  * the verify function (so it can be unit-tested in isolation and
  * later reused from a published SDK) makes that path obvious.
+ * @author asigdel29
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto'

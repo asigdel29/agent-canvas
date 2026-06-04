@@ -15,6 +15,7 @@
  * fetch methods filter archived rows out by default. `unarchive(id)`
  * brings one back. We never hard-delete because audit_log references
  * the id forever.
+ * @author asigdel29
  */
 
 import { randomUUID } from 'node:crypto'

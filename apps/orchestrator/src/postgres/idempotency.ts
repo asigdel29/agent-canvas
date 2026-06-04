@@ -5,6 +5,7 @@
  * false when the key was already bound to the same run (caller
  * short-circuits). If a different run_id tries to claim a key, the
  * routine throws IdempotencyConflictError (client bug).
+ * @author asigdel29
  */
 
 import {

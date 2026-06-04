@@ -10,6 +10,7 @@
  *
  * Each button is keyboard-focusable. The active state uses the
  * accent-soft tint plus the accent ring; hover uses surface-overlay.
+ * @author asigdel29
  */
 
 import type { ReactNode } from 'react'

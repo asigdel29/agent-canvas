@@ -6,6 +6,7 @@
  *   - Same (vendor, vendor_run_id, run_id) → idempotent no-op return.
  *   - Same (vendor, vendor_run_id) bound to a DIFFERENT run_id → throws
  *     (PK violation surfaces as a collision; we re-read and report).
+ * @author asigdel29
  */
 
 import type { RunId, VendorId } from '@agent-canvas/orchestrator-types'

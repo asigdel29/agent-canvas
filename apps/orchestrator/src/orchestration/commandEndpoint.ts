@@ -18,6 +18,7 @@
  * The endpoint does NOT call the agent vendor directly; vendor calls
  * happen later, driven from the event log by the orchestrator's run
  * coordinator. This keeps the endpoint focused on the trust boundary.
+ * @author asigdel29
  */
 
 import {

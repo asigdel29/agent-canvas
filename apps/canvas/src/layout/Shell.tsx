@@ -21,6 +21,7 @@
  * The caller composes the canvas via `children` so this file stays
  * agnostic to whatever Tldraw / EmptyState / placeholder lives in
  * the centre.
+ * @author asigdel29
  */
 
 import type { ReactNode } from 'react'

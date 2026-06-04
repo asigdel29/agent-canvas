@@ -13,6 +13,7 @@
  *
  * Visual model: max-width prose, the same dark surface as the
  * canvas, with a back link to the landing page at the top.
+ * @author asigdel29
  */
 
 import { useMemo } from 'react'

@@ -12,6 +12,7 @@
  * `archived_at` is the soft-delete marker. We never hard-delete
  * because audit_log rows hold the agent id and we want them
  * forensically readable forever.
+ * @author asigdel29
  */
 
 import type { UserId } from '@agent-canvas/orchestrator-types'

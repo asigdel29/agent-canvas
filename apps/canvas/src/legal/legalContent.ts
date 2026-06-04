@@ -12,6 +12,7 @@
  * users delete it. Before going to a public launch this should
  * be reviewed by a lawyer or a template service like Termly /
  * Iubenda.
+ * @author asigdel29
  */
 
 export const TERMS_OF_SERVICE = `# Terms of Service

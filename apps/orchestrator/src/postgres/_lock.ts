@@ -6,6 +6,7 @@
  * accepts as a 32-bit advisory lock key). Collisions on the 32-bit
  * space are statistically negligible at our run-id volume and only
  * cause spurious serialization, never correctness issues.
+ * @author asigdel29
  */
 
 export function hashRunIdForLock(run_id: string): number {

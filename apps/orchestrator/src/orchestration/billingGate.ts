@@ -9,6 +9,7 @@
  * The audit log records every run's per-vendor spend; this module
  * holds the live tally. Production uses a Postgres table updated by an
  * outbox worker as vendor billing webhooks arrive.
+ * @author asigdel29
  */
 
 export interface ProjectBudget {

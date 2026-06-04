@@ -29,6 +29,7 @@
  *     other providers.
  *   - Tool call throws: surfaced as ToolResult.error, the model
  *     reads it and revises its plan.
+ * @author asigdel29
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'

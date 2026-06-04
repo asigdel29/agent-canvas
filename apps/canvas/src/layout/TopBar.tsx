@@ -11,6 +11,7 @@
  *
  * The TopBar is presentation-only. Real wiring (rename, navigate,
  * invite collaborators, change billing) belongs to the consumer.
+ * @author asigdel29
  */
 
 import type { ReactNode } from 'react'

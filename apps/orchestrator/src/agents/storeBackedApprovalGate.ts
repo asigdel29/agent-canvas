@@ -25,6 +25,7 @@
  * hanging forever. Operators can later see the row in the
  * pending list and decide; that decision just won't affect this
  * (long-dead) run.
+ * @author asigdel29
  */
 
 import type { UserId } from '@agent-canvas/orchestrator-types'

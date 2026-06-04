@@ -6,6 +6,7 @@
  * declare the right Connector / ProviderAdapter shape — tool inventory,
  * safety classification, idempotency-key derivation — so the conformance
  * suite and the safety classifier are wired correctly from day one.
+ * @author asigdel29
  */
 
 import type {

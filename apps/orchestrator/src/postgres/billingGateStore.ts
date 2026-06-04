@@ -8,6 +8,7 @@
  * is handled by an out-of-band scheduler that compares
  * `window_started_at + window_seconds` against now() and resets the
  * row. Not in this adapter's responsibility.
+ * @author asigdel29
  */
 
 import type {

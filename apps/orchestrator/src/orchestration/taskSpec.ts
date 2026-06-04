@@ -20,6 +20,7 @@
  *   3. `destructive_actions` is empty at spec time. Destructive intent
  *      is identified at tool-call time by the SafetyClassifier, not
  *      hardcoded into the spec.
+ * @author asigdel29
  */
 
 import type { ProviderId } from '@agent-canvas/orchestrator-types'

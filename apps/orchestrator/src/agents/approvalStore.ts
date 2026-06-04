@@ -19,6 +19,7 @@
  *     surface them to the operator (multi-instance — the operator
  *     re-decides through any instance, and resolve() polls the row
  *     before declaring the wait abandoned).
+ * @author asigdel29
  */
 
 import { randomUUID } from 'node:crypto'

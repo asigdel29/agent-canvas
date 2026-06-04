@@ -11,6 +11,7 @@
  * providers cannot collide. The model sees them as e.g. `mcp__github__create_issue`,
  * `browser__navigate`, `computer__screenshot`. The orchestrator
  * splits on the double underscore to route.
+ * @author asigdel29
  */
 
 import type { ToolSchema } from './anthropicClient.js'

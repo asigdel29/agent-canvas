@@ -9,6 +9,7 @@
  * MockProvider. The cross-stack Playwright E2E (CEO decision 6.1) is a
  * follow-up; this integration test catches regressions across the
  * orchestration layer cheaply on every test run.
+ * @author asigdel29
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'

@@ -4,6 +4,7 @@
  * All calls carry the session JWT in Authorization: Bearer. Errors
  * throw WorkspaceApiError with the status + server-supplied detail
  * so the WorkspaceSwitcher / MembersPage can render a toast.
+ * @author asigdel29
  */
 
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer'

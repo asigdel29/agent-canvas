@@ -33,6 +33,7 @@
  *   - Teardown kills the VM via sandbox.kill(). Idempotent.
  *   - The sandboxFactory is async so a kill on a sandbox that
  *     never launched is a no-op.
+ * @author asigdel29
  */
 
 import type {

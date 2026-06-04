@@ -5,6 +5,7 @@
  * Every call carries the session JWT in Authorization: Bearer.
  * Errors throw AgentApiError with the status + server-supplied
  * detail so the caller can surface a meaningful toast.
+ * @author asigdel29
  */
 
 import type { NewAgentDraft } from './NewAgentModal.js'

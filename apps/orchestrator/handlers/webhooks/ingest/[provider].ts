@@ -17,6 +17,7 @@
  * Production note: the webhook handler MUST be fast (Vercel function
  * cold-start + verification + a single INSERT to the outbox). Heavy
  * work runs in the outbox drainer, not here.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../../dist/index.js'

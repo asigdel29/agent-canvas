@@ -11,6 +11,7 @@
  * only the room_id + max seq watermark. Subscribers SELECT the actual
  * payload from the projection tables. This keeps fanout cheap and
  * pgbouncer-safe.
+ * @author asigdel29
  */
 
 import type { SqlClient } from '../postgres/client.js'

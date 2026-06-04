@@ -13,6 +13,7 @@
  * Production deployment runs one ListenBus per Vercel function
  * instance (Fluid Compute reuses instances; the bus survives across
  * requests within an instance).
+ * @author asigdel29
  */
 
 import { createSqlClient, type SqlClient } from '../postgres/client.js'

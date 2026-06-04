@@ -5,6 +5,7 @@
  * Cost ceiling (eng review decision 41): each run records the number
  * of fixtures executed; CI compares against the per-PR + daily cap and
  * fails-closed if exceeded.
+ * @author asigdel29
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'

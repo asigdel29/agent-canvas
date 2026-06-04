@@ -10,6 +10,7 @@
  * The corresponding `details` shape is documented per action below.
  * Callers should match these shapes; the store is permissive (any
  * jsonb) but the audit query consumer expects them.
+ * @author asigdel29
  */
 
 export const WORKSPACE_AUDIT_ACTIONS = [

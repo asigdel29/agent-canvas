@@ -9,6 +9,7 @@
  * to /api/sync/:room via `?token=`. URL-borne credentials leak through
  * logs; the short TTL plus single-use property collapses the exposure
  * window to seconds.
+ * @author asigdel29
  */
 
 import { extractSession } from '../../dist/auth/session.js'

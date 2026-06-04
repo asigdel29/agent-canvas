@@ -10,6 +10,7 @@
  *      is the post-DX-review layout — pick a template and go.
  *   2. With onCreateAgent only: CTA up top, then connector tiles.
  *   3. Neither: original connector-tiles-only layout (back-compat).
+ * @author asigdel29
  */
 
 import { STARTERS, type Starter } from '../agent/starterAgents.js'

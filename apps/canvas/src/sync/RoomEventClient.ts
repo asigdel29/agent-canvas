@@ -21,6 +21,7 @@
  * production canvases should set a finite cap (e.g. 20 attempts ≈ 10
  * minutes at 30 s max backoff) so a phone left on a dead network
  * eventually stops draining battery.
+ * @author asigdel29
  */
 
 export type RoomEventClientMessage =

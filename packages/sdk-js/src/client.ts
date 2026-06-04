@@ -18,6 +18,7 @@
  *
  * Rate-limit headers are surfaced through the ApiError on 429 so a
  * caller can self-pace without re-parsing them.
+ * @author asigdel29
  */
 
 import type {

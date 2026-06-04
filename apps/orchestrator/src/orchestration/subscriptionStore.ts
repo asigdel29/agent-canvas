@@ -14,6 +14,7 @@
  *   4. Actor has the base subscriber-actor capability in target_room.
  *
  * All four must pass.
+ * @author asigdel29
  */
 
 import {

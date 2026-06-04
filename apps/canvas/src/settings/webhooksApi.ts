@@ -1,5 +1,6 @@
 /**
  * Thin client for /api/webhooks. Session-authenticated.
+ * @author asigdel29
  */
 
 export interface WebhookEndpointSummary {

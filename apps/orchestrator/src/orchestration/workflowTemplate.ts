@@ -10,6 +10,7 @@
  *
  * Templates are PURE DATA — no closures, no captured state — so they
  * round-trip through Postgres/JSON cleanly.
+ * @author asigdel29
  */
 
 import type { ProviderId, RoomId, UserId } from '@agent-canvas/orchestrator-types'

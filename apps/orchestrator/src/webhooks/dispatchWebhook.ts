@@ -18,6 +18,7 @@
  * The body is JSON.stringify'd here, not at delivery time, because
  * the HMAC must be over the exact bytes we send and we lock those
  * bytes into the queue row.
+ * @author asigdel29
  */
 
 import type {

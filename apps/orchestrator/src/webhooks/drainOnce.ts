@@ -21,6 +21,7 @@
  *      - 5xx / 429 / timeout / network error -> markAttemptFailed.
  *
  * Returns a summary so the operator's tick endpoint can log it.
+ * @author asigdel29
  */
 
 import { signWebhook } from './signWebhook.js'

@@ -4,6 +4,7 @@
  * Returns 200 with a small JSON body the moment the function is
  * reachable. Vercel's platform uses this for its built-in checks; the
  * monitoring stack can use it for synthetic uptime probes.
+ * @author asigdel29
  */
 
 export default async function handler(_req: Request): Promise<Response> {

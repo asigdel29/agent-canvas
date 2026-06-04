@@ -5,6 +5,7 @@
  *
  * All require a session JWT AND membership in the agent's
  * workspace. Read needs viewer+, write needs member+.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

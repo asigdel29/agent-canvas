@@ -10,6 +10,7 @@
  * (P1 work). Any authenticated user can hit any workspace. This is
  * acceptable for the current single-tenant deploy; the membership
  * gate lands with the users/workspaces tables.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

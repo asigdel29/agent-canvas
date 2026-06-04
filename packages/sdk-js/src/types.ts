@@ -9,6 +9,7 @@
  * already enforces deliberate changes.
  *
  * Every field shape matches the JSON the orchestrator returns.
+ * @author asigdel29
  */
 
 export type ApiTokenScope = 'read' | 'write'

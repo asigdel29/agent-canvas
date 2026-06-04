@@ -18,6 +18,7 @@
  *     until the limit resets.
  *
  * Time is injected so tests can be deterministic.
+ * @author asigdel29
  */
 
 import {

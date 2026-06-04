@@ -9,6 +9,7 @@
  * status dot reuses the run-state palette so the visual vocabulary
  * stays consistent ("green = healthy, amber = needs attention, red
  * = broken") across both connectors and runs.
+ * @author asigdel29
  */
 
 export interface ConnectorTile {

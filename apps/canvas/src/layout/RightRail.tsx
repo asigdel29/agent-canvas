@@ -12,6 +12,7 @@
  * The mode is computed by the parent (App) from {selectedId,
  * liveEvents.length, approvals.length}. This component is pure
  * presentation — it takes the chosen mode and the data it needs.
+ * @author asigdel29
  */
 
 import type { ReactNode } from 'react'

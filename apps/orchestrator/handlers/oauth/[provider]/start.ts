@@ -5,6 +5,7 @@
  * cookie, and redirects the user to the provider's authorize URL.
  * Real implementation lands when the connector's OAuth framework is
  * fully wired (per-adapter follow-up PR).
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../../dist/index.js'

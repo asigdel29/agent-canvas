@@ -18,6 +18,7 @@
  * Soft-delete via revoked_at so the foreign-key references from
  * the future deliveries table survive after revocation. listLive
  * filters on revoked_at IS NULL.
+ * @author asigdel29
  */
 
 import { randomBytes, randomUUID } from 'node:crypto'

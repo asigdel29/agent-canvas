@@ -7,6 +7,7 @@
  * and clears the keep-alive timer.
  *
  * Returns an SseSender + the Response to hand back to the runtime.
+ * @author asigdel29
  */
 
 export interface SseSender {

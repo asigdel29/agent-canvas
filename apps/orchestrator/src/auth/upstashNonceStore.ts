@@ -20,6 +20,7 @@
  * default for an auth check. The caller surfaces 401 to the user; the
  * client retries with a fresh token. Operators must monitor Upstash
  * availability separately.
+ * @author asigdel29
  */
 
 import type { NonceStore } from './sseToken.js'

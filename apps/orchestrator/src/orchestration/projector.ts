@@ -16,6 +16,7 @@
  *                     same output (the canvas LWW absorbs duplicates safely)
  *
  * Cross-room fan-out is bounded by max-rooms-per-run (10 in Phase 1).
+ * @author asigdel29
  */
 
 import type {

@@ -5,6 +5,7 @@
  *
  * Reads DATABASE_URL from the environment, applies any new migrations,
  * and prints a small summary. Exit code 0 on success, 1 on any error.
+ * @author asigdel29
  */
 
 import { createSqlClient } from './client.js'

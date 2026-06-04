@@ -16,6 +16,7 @@
  * Hardened in earlier tiers:
  *   - Per-workspace membership check (P1)
  *   - Rate limit per user (P5; 30 starts/min)
+ * @author asigdel29
  */
 
 import type { RoomId } from '@agent-canvas/orchestrator-types'

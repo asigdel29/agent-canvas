@@ -19,6 +19,7 @@
  * No rate limit yet — the BillingGate doesn't apply, and the
  * audit_log table can absorb thousands of rows. Revisit if abuse
  * shows up.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../dist/index.js'

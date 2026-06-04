@@ -12,6 +12,7 @@
  * computer-use) without overwhelming the empty state. Longer
  * lists become a marketplace problem and a discovery problem;
  * keep that for later.
+ * @author asigdel29
  */
 
 import type { NewAgentDraft } from './NewAgentModal.js'

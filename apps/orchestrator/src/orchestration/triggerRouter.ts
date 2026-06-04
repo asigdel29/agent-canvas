@@ -9,6 +9,7 @@
  * Auth: triggers run with the room owner's authority. The room's
  * owner_user_id and run-agents capability are consulted by
  * CommandEndpoint as usual.
+ * @author asigdel29
  */
 
 import type { NormalizedWebhookEvent } from '@agent-canvas/connector-core'

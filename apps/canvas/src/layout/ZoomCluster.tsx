@@ -8,6 +8,7 @@
  *
  * Click on the percent itself opens a fit-to-screen menu (deferred;
  * the click handler is wired but the menu lives in a follow-up).
+ * @author asigdel29
  */
 
 import type { ReactNode } from 'react'

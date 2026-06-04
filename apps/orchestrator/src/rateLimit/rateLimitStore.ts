@@ -28,6 +28,7 @@
  * traffic would amplify the incident. Operators should monitor
  * Upstash availability separately and add a circuit breaker layer
  * if the brownout risk needs to flip.
+ * @author asigdel29
  */
 
 export interface RateLimitResult {

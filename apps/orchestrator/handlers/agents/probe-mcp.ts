@@ -22,6 +22,7 @@
  * Session-gated (same auth as the rest of /api/agents). No rate
  * limit yet — adding one is a P1 task once any user can hit
  * arbitrary URLs.
+ * @author asigdel29
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'

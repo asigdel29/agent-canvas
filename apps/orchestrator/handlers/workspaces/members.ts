@@ -23,6 +23,7 @@
  *   - The actor must outrank the new role. Otherwise an admin
  *     could promote someone to owner past themselves.
  *   - The store refuses to demote / remove the last owner.
+ * @author asigdel29
  */
 
 import { getRuntime } from '../../dist/index.js'

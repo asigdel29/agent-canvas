@@ -7,6 +7,7 @@
  *
  * Route handlers use this to resolve the actor's UserId before
  * calling into the CommandEndpoint.
+ * @author asigdel29
  */
 
 import {

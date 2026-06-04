@@ -14,6 +14,7 @@
  * N defaults to 3 (validated by the Phase 0 prototype). Performance:
  * O(visible) — a cheap visible-bbox count, not a layout pass (decision
  * 34 mandate).
+ * @author asigdel29
  */
 
 import type { RunId } from '@agent-canvas/orchestrator-types'

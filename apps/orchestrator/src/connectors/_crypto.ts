@@ -6,6 +6,7 @@
  * returns `false` on any malformed input (missing header, wrong
  * length, parse error, etc.) — the alternative is throwing, which
  * the framework would surface as a 500 to attackers.
+ * @author asigdel29
  */
 
 import { createHmac, timingSafeEqual, verify as cryptoVerify } from 'node:crypto'

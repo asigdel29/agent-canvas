@@ -24,6 +24,7 @@
  *
  * Position is fixed to the canvas viewport, not the app viewport,
  * so the toast doesn't overlap the RightRail.
+ * @author asigdel29
  */
 
 import type { ReactNode } from 'react'

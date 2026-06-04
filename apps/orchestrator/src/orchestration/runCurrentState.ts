@@ -11,6 +11,7 @@
  *
  * The in-memory implementation here enforces the same predicate so that
  * tests catch monotonicity bugs.
+ * @author asigdel29
  */
 
 import type {

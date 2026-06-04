@@ -9,6 +9,7 @@
  *
  * Production deploys run this as a pre-deploy step; Vercel's build
  * hook is the natural place.
+ * @author asigdel29
  */
 
 import { readFileSync, readdirSync } from 'node:fs'

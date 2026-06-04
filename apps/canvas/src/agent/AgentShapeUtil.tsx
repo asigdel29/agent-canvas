@@ -9,6 +9,7 @@
  *
  * Render mode (full | compact) is decided by density.ts and applied at
  * the render-tree level — the shape doesn't own that decision.
+ * @author asigdel29
  */
 
 import {

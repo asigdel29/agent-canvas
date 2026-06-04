@@ -1,6 +1,7 @@
 /**
  * PostgresSubscriptionStore — per-subscription delegated capability
  * with subscription_epoch TOCTOU guard.
+ * @author asigdel29
  */
 
 import {

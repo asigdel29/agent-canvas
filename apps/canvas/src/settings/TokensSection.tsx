@@ -14,6 +14,7 @@
  * Why session-only: the orchestrator's POST /api/tokens refuses an
  * API-token auth header. A leaked machine token must not be able
  * to mint another token.
+ * @author asigdel29
  */
 
 import { useEffect, useState } from 'react'

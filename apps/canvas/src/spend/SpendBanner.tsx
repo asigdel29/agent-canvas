@@ -10,6 +10,7 @@
  * 80% and Framer pink at 100%. The pink reuses --live deliberately —
  * "out of budget" is the same kind of attention-demanding state as
  * "agent is running".
+ * @author asigdel29
  */
 
 export interface SpendIndicatorProps {

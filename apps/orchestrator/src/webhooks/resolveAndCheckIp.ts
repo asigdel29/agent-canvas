@@ -14,6 +14,7 @@
  *
  * The check is bypassed when WEBHOOK_URL_ALLOW_PRIVATE=true (dev
  * escape hatch shared with validateWebhookUrl).
+ * @author asigdel29
  */
 
 import { lookup } from 'node:dns/promises'

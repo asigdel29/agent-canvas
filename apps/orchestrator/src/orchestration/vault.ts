@@ -16,6 +16,7 @@
  * Vault is on the Vercel side (decision 1.1). Workers never touch
  * long-lived credentials. KMS reads are cached with a bounded TTL
  * (outside-voice HIGH on thundering-herd KMS QPS).
+ * @author asigdel29
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
