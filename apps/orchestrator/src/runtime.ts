@@ -94,16 +94,7 @@ import { InMemorySubscriptionStore } from './orchestration/subscriptionStore.js'
 import { InMemoryOutbox } from './orchestration/transactionalOutbox.js'
 import { InMemoryVault, LocalKmsClient, StubKmsClient } from './orchestration/vault.js'
 
-import { DiscordConnector } from './connectors/discord/connector.js'
 import { GitHubConnector } from './connectors/github/connector.js'
-import { GraphiteConnector } from './connectors/graphite/connector.js'
-import { LinearConnector } from './connectors/linear/connector.js'
-import { RailwayConnector } from './connectors/railway/connector.js'
-import { SlackConnector } from './connectors/slack/connector.js'
-import { SupabaseConnector } from './connectors/supabase/connector.js'
-import { VercelConnector } from './connectors/vercel/connector.js'
-import { CodexProvider } from './connectors/codex/provider.js'
-import { OpenHandsProvider } from './connectors/openhands/provider.js'
 import { MockProvider } from './connectors/mockProvider.js'
 
 import {
@@ -219,15 +210,6 @@ function build(): Runtime {
 
 	const registry = new ConnectorRegistry()
 	registry.registerConnector(new GitHubConnector())
-	registry.registerConnector(new LinearConnector())
-	registry.registerConnector(new SlackConnector())
-	registry.registerConnector(new DiscordConnector())
-	registry.registerConnector(new GraphiteConnector())
-	registry.registerConnector(new RailwayConnector())
-	registry.registerConnector(new VercelConnector())
-	registry.registerConnector(new SupabaseConnector())
-	registry.registerProvider(new CodexProvider())
-	registry.registerProvider(new OpenHandsProvider())
 	if (process.env['ENABLE_MOCK_PROVIDER'] === 'true') {
 		registry.registerProvider(new MockProvider())
 	}
