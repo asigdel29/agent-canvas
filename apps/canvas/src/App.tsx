@@ -1287,11 +1287,5 @@ function providerLabel(p: StarterProvider): string {
 	switch (p) {
 		case 'github':
 			return 'GitHub'
-		case 'linear':
-			return 'Linear'
-		case 'slack':
-			return 'Slack'
-		case 'vercel':
-			return 'Vercel'
 	}
 }

@@ -15,7 +15,7 @@
 
 import { STARTERS, type Starter } from '../agent/starterAgents.js'
 
-export type StarterProvider = 'github' | 'linear' | 'slack' | 'vercel'
+export type StarterProvider = 'github'
 
 export interface EmptyStateProps {
 	readonly onConnect: (provider: StarterProvider) => void
@@ -38,9 +38,6 @@ export interface EmptyStateProps {
 
 const TILES: { id: StarterProvider; label: string; tagline: string }[] = [
 	{ id: 'github', label: 'GitHub', tagline: 'Issues, PRs, reviews' },
-	{ id: 'linear', label: 'Linear', tagline: 'Issues and projects' },
-	{ id: 'slack', label: 'Slack', tagline: 'Channels and threads' },
-	{ id: 'vercel', label: 'Vercel', tagline: 'Deploys and previews' },
 ]
 
 export function EmptyState({

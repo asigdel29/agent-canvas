@@ -2,7 +2,7 @@
  * OnboardingWizard — first-run, four steps:
  *
  *   1. Welcome      what is this product, two-line pitch
- *   2. Connect      pick a first tool (GitHub / Linear / Slack / Vercel)
+ *   2. Connect      connect GitHub
  *   3. Budget       set a daily spend ceiling
  *   4. Done         summary + 'Enter canvas' button
  *
@@ -37,9 +37,6 @@ export interface OnboardingWizardProps {
 
 const PROVIDERS: { id: StarterProvider; label: string; tagline: string }[] = [
 	{ id: 'github', label: 'GitHub', tagline: 'Issues, PRs, reviews' },
-	{ id: 'linear', label: 'Linear', tagline: 'Issues and projects' },
-	{ id: 'slack', label: 'Slack', tagline: 'Channels and threads' },
-	{ id: 'vercel', label: 'Vercel', tagline: 'Deploys and previews' },
 ]
 
 const BUDGET_PRESETS: { label: string; micros: number }[] = [
