@@ -9,7 +9,7 @@ import {
 	StubKmsClient,
 } from './vault.js'
 
-const USER: UserId = 'user_anu' as UserId
+const USER: UserId = 'user_alice' as UserId
 const RUN: RunId = 'run_a' as RunId
 const PROV: ProviderId = 'github'
 
@@ -22,7 +22,7 @@ class TestMinter implements ScopedCredentialMinter {
 			access_token: `scoped_for_${req.run_id}_from_${plaintext.slice(0, 4)}`,
 			expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
 			scope: req.requested_scope,
-			principal_label: 'anu@github',
+			principal_label: 'alice@github',
 		}
 	}
 }

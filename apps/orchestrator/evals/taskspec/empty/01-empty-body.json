@@ -2,7 +2,7 @@
   "input": {
     "goal": "Investigate the latest CI failure",
     "source": "github_webhook",
-    "actor_user_id": "u_anu",
+    "actor_user_id": "u_alice",
     "room_id": "room_a",
     "untrusted_ticket_body": ""
   },

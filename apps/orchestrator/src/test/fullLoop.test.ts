@@ -45,7 +45,7 @@ import { InMemorySubscriptionStore } from '../orchestration/subscriptionStore.js
 import { InMemoryOutbox } from '../orchestration/transactionalOutbox.js'
 import { InMemoryVendorRunMap } from '../orchestration/vendorRunMap.js'
 
-const ANU: UserId = 'u_anu' as UserId
+const ALICE: UserId = 'u_alice' as UserId
 const ROOM: RoomId = 'room_loop' as RoomId
 const RUN: RunId = 'run_loop' as RunId
 
@@ -61,7 +61,7 @@ interface Loop {
 
 function buildLoop(): Loop {
 	const capabilities = new StaticCapabilityResolver()
-	capabilities.grant(ANU, ROOM, ['view', 'edit', 'run-agents'])
+	capabilities.grant(ALICE, ROOM, ['view', 'edit', 'run-agents'])
 
 	const registry = new ConnectorRegistry()
 	const vendor = new MockProvider({
@@ -109,7 +109,7 @@ function startCommand(): Command {
 		kind: 'start_request',
 		run_id: RUN,
 		room_id: ROOM,
-		actor_user_id: ANU,
+		actor_user_id: ALICE,
 		idempotency_key: `idk_${Math.random().toString(16).slice(2)}`,
 		payload: {
 			taskSpec: {

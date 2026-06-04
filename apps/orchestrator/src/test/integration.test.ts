@@ -55,7 +55,7 @@ import { MockProvider } from '../connectors/mockProvider.js'
 import { GitHubConnector } from '../connectors/github/connector.js'
 import { SafetyClassifier } from '../orchestration/safetyClassifier.js'
 
-const ANU: UserId = 'u_anu' as UserId
+const ALICE: UserId = 'u_alice' as UserId
 const MIRA: UserId = 'u_mira' as UserId
 const ROOM_A: RoomId = 'room_a' as RoomId
 const ROOM_B: RoomId = 'room_b' as RoomId
@@ -68,7 +68,7 @@ class GitHubMinter implements ScopedCredentialMinter {
 			access_token: `ghs_scoped_${req.run_id}_${plaintext.slice(0, 4)}`,
 			expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
 			scope: req.requested_scope,
-			principal_label: 'anu@github',
+			principal_label: 'alice@github',
 		}
 	}
 }
@@ -93,7 +93,7 @@ interface World {
 
 async function buildWorld(): Promise<World> {
 	const capabilities = new StaticCapabilityResolver()
-	capabilities.grant(ANU, ROOM_A, ['view', 'edit', 'run-agents'])
+	capabilities.grant(ALICE, ROOM_A, ['view', 'edit', 'run-agents'])
 	capabilities.grant(MIRA, ROOM_B, ['view', 'subscriber-actor'])
 
 	const subscriptions = new InMemorySubscriptionStore()
@@ -147,9 +147,9 @@ async function buildWorld(): Promise<World> {
 	const vault = new InMemoryVault(new StubKmsClient())
 	vault.registerMinter(new GitHubMinter())
 	await vault.store({
-		user_id: ANU,
+		user_id: ALICE,
 		provider: 'github',
-		ciphertext: await new StubKmsClient().encrypt('refresh_token_anu'),
+		ciphertext: await new StubKmsClient().encrypt('refresh_token_alice'),
 	})
 
 	const safety = new SafetyClassifier(registry)
@@ -178,7 +178,7 @@ function cmd(overrides: Partial<Command> = {}): Command {
 		kind: 'start_request',
 		run_id: RUN,
 		room_id: ROOM_A,
-		actor_user_id: ANU,
+		actor_user_id: ALICE,
 		idempotency_key: `idk_${Math.random().toString(16).slice(2)}`,
 		payload: { taskSpec: { goal: 'demo' } },
 		ts: new Date().toISOString(),
@@ -232,7 +232,7 @@ describe('integration: start-to-projection spine', () => {
 			run_id: RUN,
 			origin_room_id: ROOM_A,
 			target_room_id: ROOM_B,
-			established_by_user_id: ANU,
+			established_by_user_id: ALICE,
 		})
 		world.projectionResolver.addSubscription(sub)
 
@@ -274,7 +274,7 @@ describe('integration: start-to-projection spine', () => {
 			run_id: RUN,
 			origin_room_id: ROOM_A,
 			target_room_id: ROOM_B,
-			established_by_user_id: ANU,
+			established_by_user_id: ALICE,
 		})
 		world.projectionResolver.addSubscription(sub)
 		world.tombstones.mark(RUN, ROOM_B) // delete the shape from B
@@ -303,12 +303,12 @@ describe('integration: start-to-projection spine', () => {
 	it('vault mints a scoped credential the vendor sees, but the long-lived token never leaves', async () => {
 		const scoped = await world.vault.mintScopedCredential({
 			run_id: RUN,
-			user_id: ANU,
+			user_id: ALICE,
 			provider: 'github',
 			requested_scope: 'repo:read',
 		})
 		expect(scoped.access_token.startsWith('ghs_scoped_')).toBe(true)
-		expect(scoped.access_token).not.toContain('refresh_token_anu')
+		expect(scoped.access_token).not.toContain('refresh_token_alice')
 	})
 
 	it('idempotent start_request: double-click produces one run', async () => {
@@ -341,7 +341,7 @@ describe('integration: start-to-projection spine', () => {
 			run_id: RUN,
 			origin_room_id: ROOM_A,
 			target_room_id: ROOM_B,
-			established_by_user_id: ANU,
+			established_by_user_id: ALICE,
 		})
 		// MIRA approves from B with the correct epoch — should succeed.
 		await world.endpoint.accept(

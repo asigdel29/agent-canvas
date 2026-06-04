@@ -17,7 +17,7 @@ import {
 	type WorkflowTemplate,
 } from './workflowTemplate.js'
 
-const ANU: UserId = 'u_anu' as UserId
+const ALICE: UserId = 'u_alice' as UserId
 const ROOM: RoomId = 'room_trigger' as RoomId
 
 function makeTemplate(overrides: Partial<WorkflowTemplate> = {}): WorkflowTemplate {
@@ -56,7 +56,7 @@ interface Harness {
 
 function buildHarness(): Harness {
 	const capabilities = new StaticCapabilityResolver()
-	capabilities.grant(ANU, ROOM, ['view', 'edit', 'run-agents'])
+	capabilities.grant(ALICE, ROOM, ['view', 'edit', 'run-agents'])
 	const eventLog = new InMemoryEventLog()
 	const endpoint = new CommandEndpoint({
 		capabilities,
@@ -74,7 +74,7 @@ function buildHarness(): Harness {
 	const router = new TriggerRouter({
 		templates,
 		endpoint,
-		resolveRoomForTrigger: async () => ({ room_id: ROOM, owner_user_id: ANU }),
+		resolveRoomForTrigger: async () => ({ room_id: ROOM, owner_user_id: ALICE }),
 	})
 	return { router, templates, eventLog, endpoint }
 }
@@ -160,15 +160,15 @@ describe('TriggerRouter', () => {
 				auto_triggers: [{ provider: 'linear', event_type: 'issue_created' }],
 			})
 		)
-		// Strip ANU's run-agents to make BOTH commands fail authz —
+		// Strip ALICE's run-agents to make BOTH commands fail authz —
 		// proves the router collects errors for all templates.
 		const capabilities = new StaticCapabilityResolver()
-		// Note: leaving ANU empty in this resolver means CommandEndpoint
+		// Note: leaving ALICE empty in this resolver means CommandEndpoint
 		// will reject with unauthorized. Build a fresh harness for this case.
 		void capabilities
 		const result = await h.router.route('linear', makeEvent({ issue: { identifier: 'ENG-1' } }))
 		expect(result.matched).toBe(2)
-		// Both templates dispatched in this harness since ANU has run-agents.
+		// Both templates dispatched in this harness since ALICE has run-agents.
 		expect(result.dispatched).toBe(2)
 	})
 })

@@ -21,16 +21,16 @@ describe('extractSession', () => {
 
 	it('returns the claims for a valid bearer token', () => {
 		const token = signSession(
-			{ sub: 'u_anu', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60, sid: 's1' },
+			{ sub: 'u_alice', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60, sid: 's1' },
 			SECRET
 		)
 		const claims = extractSession(reqWith(`Bearer ${token}`), SECRET)
-		expect(claims?.sub).toBe('u_anu')
+		expect(claims?.sub).toBe('u_alice')
 	})
 
 	it('returns null when the token signature is wrong', () => {
 		const token = signSession(
-			{ sub: 'u_anu', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60, sid: 's1' },
+			{ sub: 'u_alice', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60, sid: 's1' },
 			'different_secret'
 		)
 		expect(extractSession(reqWith(`Bearer ${token}`), SECRET)).toBeNull()
@@ -38,10 +38,10 @@ describe('extractSession', () => {
 
 	it('accepts the case-insensitive bearer keyword', () => {
 		const token = signSession(
-			{ sub: 'u_anu', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60, sid: 's1' },
+			{ sub: 'u_alice', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60, sid: 's1' },
 			SECRET
 		)
-		expect(extractSession(reqWith(`bearer ${token}`), SECRET)?.sub).toBe('u_anu')
-		expect(extractSession(reqWith(`BEARER ${token}`), SECRET)?.sub).toBe('u_anu')
+		expect(extractSession(reqWith(`bearer ${token}`), SECRET)?.sub).toBe('u_alice')
+		expect(extractSession(reqWith(`BEARER ${token}`), SECRET)?.sub).toBe('u_alice')
 	})
 })

@@ -16,7 +16,7 @@ import { InMemoryRunCurrentStateCache } from './runCurrentState.js'
 import { InMemorySubscriptionStore } from './subscriptionStore.js'
 import { InMemoryOutbox } from './transactionalOutbox.js'
 
-const ANU: UserId = 'u_anu' as UserId
+const ALICE: UserId = 'u_alice' as UserId
 const MIRA: UserId = 'u_mira' as UserId
 const ROOM_A: RoomId = 'room_a' as RoomId
 const ROOM_B: RoomId = 'room_b' as RoomId
@@ -24,7 +24,7 @@ const RUN: RunId = 'run_z' as RunId
 
 function buildHarness(opts: { withBudget?: boolean } = {}) {
 	const capabilities = new StaticCapabilityResolver()
-	capabilities.grant(ANU, ROOM_A, ['view', 'edit', 'run-agents'])
+	capabilities.grant(ALICE, ROOM_A, ['view', 'edit', 'run-agents'])
 	capabilities.grant(MIRA, ROOM_A, ['view'])
 	capabilities.grant(MIRA, ROOM_B, ['view', 'subscriber-actor'])
 
@@ -60,7 +60,7 @@ function cmd(overrides: Partial<Command> = {}): Command {
 		kind: 'start_request',
 		run_id: RUN,
 		room_id: ROOM_A,
-		actor_user_id: ANU,
+		actor_user_id: ALICE,
 		idempotency_key: `idk_${Math.random().toString(16).slice(2)}`,
 		payload: { taskSpec: { goal: 'demo' } },
 		ts: new Date().toISOString(),
@@ -115,7 +115,7 @@ describe('CommandEndpoint', () => {
 			run_id: RUN,
 			origin_room_id: ROOM_A,
 			target_room_id: ROOM_B,
-			established_by_user_id: ANU,
+			established_by_user_id: ALICE,
 		})
 		await expect(
 			h.endpoint.accept(
@@ -135,7 +135,7 @@ describe('CommandEndpoint', () => {
 			run_id: RUN,
 			origin_room_id: ROOM_A,
 			target_room_id: ROOM_B,
-			established_by_user_id: ANU,
+			established_by_user_id: ALICE,
 		})
 		const result = await h.endpoint.accept(
 			cmd({
@@ -155,7 +155,7 @@ describe('CommandEndpoint', () => {
 			run_id: RUN,
 			origin_room_id: ROOM_A,
 			target_room_id: ROOM_B,
-			established_by_user_id: ANU,
+			established_by_user_id: ALICE,
 		})
 		await h.subscriptions.edit(sub.id, ['reject']) // bump epoch
 		await expect(

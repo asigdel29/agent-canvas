@@ -28,7 +28,7 @@ function sub(target: RoomId, revoked: string | null = null): Subscription {
 		run_id: RUN,
 		origin_room_id: A,
 		target_room_id: target,
-		established_by_user_id: 'u_anu' as Subscription['established_by_user_id'],
+		established_by_user_id: 'u_alice' as Subscription['established_by_user_id'],
 		allowed_actions: ['approve', 'reject', 'cancel'],
 		subscription_epoch: 1,
 		created_at: '2026-01-01T00:00:00Z',

@@ -95,7 +95,7 @@ describe('instantiateGoal', () => {
 			id: 'nested',
 			goal_template: 'Hello {{trigger.user.profile.name}}',
 		}
-		const goal = instantiateGoal(t2, { user: { profile: { name: 'Anu' } } })
-		expect(goal).toBe('Hello Anu')
+		const goal = instantiateGoal(t2, { user: { profile: { name: 'Alice' } } })
+		expect(goal).toBe('Hello Alice')
 	})
 })

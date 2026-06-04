@@ -1,6 +1,6 @@
 # Operator guide
 
-Five-minute walkthrough from "I have a Claude key" to "an agent is searching the web for me." If you have not signed in yet, go to <https://agent-canvas-ivory.vercel.app> first.
+Five-minute walkthrough from "I have a Claude key" to "an agent is searching the web for me." If you have not signed in yet, open your deployment's URL first (for a local run, <http://localhost:3000>).
 
 ## Time budget
 
@@ -156,4 +156,4 @@ Open the Settings drawer at any time and clear both fields, then Save. The keys 
 
 To delete an agent: select it on the canvas, hit Delete. The agent is soft-deleted on the orchestrator (audit log keeps the trail forever); the shape disappears from your canvas.
 
-To sign out: visit Vercel's account menu in another tab or wait 7 days for the session JWT to expire. (A first-class Sign out button is on the roadmap; track it on issue X.)
+To sign out: clear the browser tab's session storage or wait 7 days for the session JWT to expire. (A first-class Sign out button is on the roadmap.)

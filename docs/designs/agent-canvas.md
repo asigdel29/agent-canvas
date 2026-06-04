@@ -296,7 +296,7 @@ Zero critical gaps (every row has rescue + test + user-visible signal + log).
 - **Adversarial test set:** forged webhook, prompt-injection ticket, replay storm, vendor malformed JSON, reconnect-regression attempt (must be impossible under backend-authoritative).
 - **Adversarial eval suite:** ≥100 fixtures in `injection` category alone; baselines committed and diffed in CI.
 - **Adapter conformance suite:** every adapter imports and runs the framework conformance fixture. Drift = test failure.
-- **Test plan artifact** at `~/.gstack/projects/tldraw-tldraw/anu-main-eng-review-test-plan-20260523-122948.md` is the QA source-of-truth.
+- **Test plan artifact:** the engineering-review test plan is the QA source-of-truth.
 
 ## Worktree parallelization
 
@@ -322,5 +322,5 @@ Lanes: (1) F + B parallel · (2) C + A + E parallel · (3) D in 10 sub-lanes (on
 
 ## Source documents
 
-- `~/.gstack/projects/tldraw-tldraw/anu-main-eng-review-test-plan-20260523-122948.md` — test plan artifact (consumed by `/qa` and `/qa-only`)
-- gstack review-log entries: `plan-ceo-review · plan-design-review · plan-eng-review · codex-plan-review ×2`, all at HEAD `84056a8f8`.
+- Engineering-review test plan — the QA source-of-truth for this design.
+- Design review log: CEO, design, and engineering plan reviews.

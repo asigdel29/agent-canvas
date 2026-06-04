@@ -19,8 +19,9 @@ export const TERMS_OF_SERVICE = `# Terms of Service
 _Last updated: 2026-05-25_
 
 These Terms govern your use of **agent-canvas** ("the Service"),
-operated by Anubhav Sigdel ("we", "us"). By using the Service you
-agree to these Terms. If you disagree, stop using the Service.
+operated by the team that deploys it ("we", "us"). By using the
+Service you agree to these Terms. If you disagree, stop using the
+Service.
 
 ## 1. What the Service is
 
@@ -137,8 +138,7 @@ profile. Continued use after a revision means you accept it.
 
 ## 13. Contact
 
-Questions: open an issue at github.com/asigdel29/agent-canvas
-or email **anu@getlora.com**.
+Questions: open an issue at github.com/asigdel29/agent-canvas.
 `
 
 export const PRIVACY_POLICY = `# Privacy Policy
@@ -146,8 +146,7 @@ export const PRIVACY_POLICY = `# Privacy Policy
 _Last updated: 2026-05-25_
 
 This policy describes what data **agent-canvas** ("the Service")
-collects, why, and how to delete it. It applies to anyone using
-the Service at agent-canvas-ivory.vercel.app or any deployment
+collects, why, and how to delete it. It applies to any deployment
 of the open-source code base.
 
 ## What we collect
@@ -225,8 +224,8 @@ You can request:
   retained for compliance, your identifier replaced).
 - **Portability:** the same access dump in machine-readable form
 
-Email **anu@getlora.com** to exercise any of these. We respond
-within 30 days. Free of charge.
+Open an issue at github.com/asigdel29/agent-canvas to exercise any
+of these. We respond within 30 days. Free of charge.
 
 ## Cookies
 
@@ -252,6 +251,5 @@ or email.
 
 ## Contact
 
-**anu@getlora.com** or open an issue at
-github.com/asigdel29/agent-canvas.
+Open an issue at github.com/asigdel29/agent-canvas.
 `

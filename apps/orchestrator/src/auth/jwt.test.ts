@@ -5,7 +5,7 @@ const SECRET = 'sek_orchestrator_test'
 
 function claims(overrides: Partial<Parameters<typeof signSession>[0]> = {}) {
 	return {
-		sub: 'u_anu',
+		sub: 'u_alice',
 		iat: 1700000000,
 		exp: 1700000000 + 3600,
 		sid: 'sess_abc',
@@ -17,7 +17,7 @@ describe('JWT session', () => {
 	it('round-trips a signed token', () => {
 		const token = signSession(claims(), SECRET)
 		const verified = verifySession(token, SECRET, claims().iat + 10)
-		expect(verified.sub).toBe('u_anu')
+		expect(verified.sub).toBe('u_alice')
 		expect(verified.sid).toBe('sess_abc')
 	})
 

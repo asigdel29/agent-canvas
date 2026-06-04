@@ -2,7 +2,7 @@
   "input": {
     "goal": "Open a GitHub PR to add a robots.txt file and post a Slack message to #eng when done",
     "source": "user_typed",
-    "actor_user_id": "u_anu",
+    "actor_user_id": "u_alice",
     "room_id": "room_a"
   },
   "expected_shape": {

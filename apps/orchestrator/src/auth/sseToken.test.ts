@@ -17,20 +17,20 @@ function freshStore(): InMemoryNonceStore {
 describe('SSE token mint + verify', () => {
 	it('round-trips a fresh token', async () => {
 		const store = freshStore()
-		const token = mintSseToken({ sub: 'u_anu', room_id: 'room_a', secret: SECRET })
+		const token = mintSseToken({ sub: 'u_alice', room_id: 'room_a', secret: SECRET })
 		const claims = await verifySseToken({
 			token,
 			room_id: 'room_a',
 			secret: SECRET,
 			nonceStore: store,
 		})
-		expect(claims.sub).toBe('u_anu')
+		expect(claims.sub).toBe('u_alice')
 		expect(claims.room_id).toBe('room_a')
 	})
 
 	it('rejects a token verified against the wrong room', async () => {
 		const store = freshStore()
-		const token = mintSseToken({ sub: 'u_anu', room_id: 'room_a', secret: SECRET })
+		const token = mintSseToken({ sub: 'u_alice', room_id: 'room_a', secret: SECRET })
 		await expect(
 			verifySseToken({ token, room_id: 'room_other', secret: SECRET, nonceStore: store })
 		).rejects.toThrow(SseTokenError)
@@ -38,7 +38,7 @@ describe('SSE token mint + verify', () => {
 
 	it('rejects a token signed with the wrong secret', async () => {
 		const store = freshStore()
-		const token = mintSseToken({ sub: 'u_anu', room_id: 'room_a', secret: SECRET })
+		const token = mintSseToken({ sub: 'u_alice', room_id: 'room_a', secret: SECRET })
 		await expect(
 			verifySseToken({ token, room_id: 'room_a', secret: 'other', nonceStore: store })
 		).rejects.toThrow(expect.objectContaining({ reason: 'bad_signature' }))
@@ -47,7 +47,7 @@ describe('SSE token mint + verify', () => {
 	it('rejects an expired token', async () => {
 		const store = freshStore()
 		const token = mintSseToken({
-			sub: 'u_anu',
+			sub: 'u_alice',
 			room_id: 'room_a',
 			secret: SECRET,
 			ttlSeconds: 60,
@@ -66,14 +66,14 @@ describe('SSE token mint + verify', () => {
 
 	it('rejects a replayed token (same nonce twice on the same instance)', async () => {
 		const store = freshStore()
-		const token = mintSseToken({ sub: 'u_anu', room_id: 'room_a', secret: SECRET })
+		const token = mintSseToken({ sub: 'u_alice', room_id: 'room_a', secret: SECRET })
 		const first = await verifySseToken({
 			token,
 			room_id: 'room_a',
 			secret: SECRET,
 			nonceStore: store,
 		})
-		expect(first.sub).toBe('u_anu')
+		expect(first.sub).toBe('u_alice')
 		await expect(
 			verifySseToken({ token, room_id: 'room_a', secret: SECRET, nonceStore: store })
 		).rejects.toThrow(expect.objectContaining({ reason: 'replayed' }))
@@ -81,7 +81,7 @@ describe('SSE token mint + verify', () => {
 
 	it('rejects a tampered token (forged sub)', async () => {
 		const store = freshStore()
-		const token = mintSseToken({ sub: 'u_anu', room_id: 'room_a', secret: SECRET })
+		const token = mintSseToken({ sub: 'u_alice', room_id: 'room_a', secret: SECRET })
 		const parts = token.split('.')
 		parts[1] = 'u_attacker'
 		const tampered = parts.join('.')
@@ -104,7 +104,7 @@ describe('SSE token mint + verify', () => {
 
 	it('rejects a token of a future version (forward-compat guard)', async () => {
 		const store = freshStore()
-		const token = mintSseToken({ sub: 'u_anu', room_id: 'room_a', secret: SECRET })
+		const token = mintSseToken({ sub: 'u_alice', room_id: 'room_a', secret: SECRET })
 		const wrongVersion = 'sse99' + token.slice(4)
 		await expect(
 			verifySseToken({
@@ -142,13 +142,13 @@ describe('SSE token mint + verify', () => {
 describe('Two-phase verify (signature/scope + nonce-claim)', () => {
 	it('signature-and-scope verify does NOT touch the nonce store', async () => {
 		const store = new InMemoryNonceStore()
-		const token = mintSseToken({ sub: 'u_anu', room_id: 'room_a', secret: SECRET })
+		const token = mintSseToken({ sub: 'u_alice', room_id: 'room_a', secret: SECRET })
 		const claims = verifySseTokenSignatureAndScope({
 			token,
 			room_id: 'room_a',
 			secret: SECRET,
 		})
-		expect(claims.sub).toBe('u_anu')
+		expect(claims.sub).toBe('u_alice')
 		// A second call with the same token still works — nonce is untouched.
 		const claims2 = verifySseTokenSignatureAndScope({
 			token,

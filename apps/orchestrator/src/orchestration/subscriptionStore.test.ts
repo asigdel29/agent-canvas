@@ -10,7 +10,7 @@ import { InMemorySubscriptionStore } from './subscriptionStore.js'
 const RUN: RunId = 'run_x' as RunId
 const A: RoomId = 'room_a' as RoomId
 const B: RoomId = 'room_b' as RoomId
-const U: UserId = 'u_anu' as UserId
+const U: UserId = 'u_alice' as UserId
 
 describe('InMemorySubscriptionStore', () => {
 	it('establishes a subscription with default full action set', async () => {
