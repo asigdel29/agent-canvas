@@ -3,6 +3,7 @@ import { VaultMintError } from '@agent-canvas/connector-core'
 import type { ProviderId, RunId, UserId } from '@agent-canvas/orchestrator-types'
 import {
 	InMemoryVault,
+	LocalKmsClient,
 	type MintRequest,
 	type ScopedCredentialMinter,
 	StubKmsClient,
@@ -125,5 +126,40 @@ describe('InMemoryVault', () => {
 		const entry = await vault.store({ user_id: USER, provider: PROV, ciphertext })
 		await vault.revoke(entry.id)
 		expect(await vault.retrieve(USER, PROV)).toBeNull()
+	})
+})
+
+describe('LocalKmsClient', () => {
+	// Fixed 32-byte key so the test is deterministic.
+	const KEY = '0'.repeat(64)
+
+	it('round-trips plaintext through encrypt/decrypt', async () => {
+		const kms = new LocalKmsClient(KEY)
+		const ciphertext = await kms.encrypt('refresh_token_secret')
+		expect(ciphertext.startsWith('local:')).toBe(true)
+		expect(ciphertext).not.toContain('refresh_token_secret')
+		expect(await kms.decrypt(ciphertext)).toBe('refresh_token_secret')
+	})
+
+	it('produces a fresh IV per call (ciphertexts differ)', async () => {
+		const kms = new LocalKmsClient(KEY)
+		const a = await kms.encrypt('same')
+		const b = await kms.encrypt('same')
+		expect(a).not.toBe(b)
+	})
+
+	it('rejects a key that is not 32 bytes', () => {
+		expect(() => new LocalKmsClient('abcd')).toThrow()
+	})
+
+	it('fails authentication on a tampered ciphertext', async () => {
+		const kms = new LocalKmsClient(KEY)
+		const ciphertext = await kms.encrypt('payload')
+		const parts = ciphertext.split(':')
+		// Flip the last hex character of the encrypted data.
+		const data = parts[3]
+		const flipped = data.slice(0, -1) + (data.endsWith('0') ? '1' : '0')
+		const tampered = `${parts[0]}:${parts[1]}:${parts[2]}:${flipped}`
+		await expect(kms.decrypt(tampered)).rejects.toThrow()
 	})
 })

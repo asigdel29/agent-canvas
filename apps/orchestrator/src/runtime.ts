@@ -6,9 +6,10 @@
  * the in-memory implementations are used (useful for local development
  * and tests; not for production traffic).
  *
- * KMS_KEY_ID picks AwsKmsClient; absence falls back to StubKmsClient.
+ * VAULT_KEY (32-byte hex) picks LocalKmsClient for AES-256-GCM
+ * encryption at rest; absence falls back to StubKmsClient (dev/tests).
  *
- * Connector registry installs the ten provider adapters + a MockProvider
+ * Connector registry installs the GitHub connector + a MockProvider
  * for local-only smoke testing.
  */
 
@@ -91,8 +92,7 @@ import { InMemoryRunCurrentStateCache } from './orchestration/runCurrentState.js
 import { SafetyClassifier } from './orchestration/safetyClassifier.js'
 import { InMemorySubscriptionStore } from './orchestration/subscriptionStore.js'
 import { InMemoryOutbox } from './orchestration/transactionalOutbox.js'
-import { InMemoryVault, StubKmsClient } from './orchestration/vault.js'
-import { AwsKmsClient } from './vault/awsKms.js'
+import { InMemoryVault, LocalKmsClient, StubKmsClient } from './orchestration/vault.js'
 
 import { DiscordConnector } from './connectors/discord/connector.js'
 import { GitHubConnector } from './connectors/github/connector.js'
@@ -190,8 +190,8 @@ function build(): Runtime {
 
 	const billingGate = process.env['BILLING_ENABLED'] === 'true' ? new BillingGate(billingStore) : null
 
-	const kmsKey = process.env['KMS_KEY_ID']
-	const kms = kmsKey ? new AwsKmsClient({ keyId: kmsKey }) : new StubKmsClient()
+	const vaultKey = process.env['VAULT_KEY']
+	const kms = vaultKey ? new LocalKmsClient(vaultKey) : new StubKmsClient()
 	void new InMemoryVault(kms) // Vault is constructed lazily by callers that need it.
 
 	const projectionResolver = new InMemorySubscriptionResolver()

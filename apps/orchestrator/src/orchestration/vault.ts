@@ -18,6 +18,8 @@
  * (outside-voice HIGH on thundering-herd KMS QPS).
  */
 
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+
 import {
 	VaultMintError,
 	VaultUnavailableError,
@@ -79,6 +81,62 @@ export class StubKmsClient implements KmsClient {
 	async decrypt(ciphertext: string): Promise<string> {
 		if (!ciphertext.startsWith('stub:')) throw new VaultUnavailableError('stub ciphertext expected')
 		return Buffer.from(ciphertext.slice(5), 'base64').toString('utf8')
+	}
+}
+
+/**
+ * LocalKmsClient — AES-256-GCM encryption with a key held in process env.
+ *
+ * The self-hosting replacement for an external KMS (AWS KMS, GCP KMS,
+ * an HSM). The 32-byte key is supplied as a hex string via VAULT_KEY and
+ * never leaves the process. Ciphertext is `local:<iv>:<tag>:<data>`, all
+ * hex. AES-GCM gives confidentiality plus an authentication tag, so a
+ * tampered ciphertext fails to decrypt rather than returning garbage.
+ *
+ * Intended for a single-tenant internal deployment where the orchestrator
+ * runs as one trusted process. For multi-tenant or compliance-bound
+ * deployments, supply a real KMS-backed KmsClient instead.
+ */
+export class LocalKmsClient implements KmsClient {
+	private readonly key: Buffer
+
+	/**
+	 * @param keyHex 64-character hex string (32 bytes). Throws when the
+	 *   key is missing or the wrong length — fail fast at boot rather than
+	 *   on the first credential write.
+	 */
+	constructor(keyHex: string) {
+		const key = Buffer.from(keyHex, 'hex')
+		if (key.length !== 32) {
+			throw new VaultUnavailableError('VAULT_KEY must be a 64-character hex string (32 bytes)')
+		}
+		this.key = key
+	}
+
+	async encrypt(plaintext: string): Promise<string> {
+		const iv = randomBytes(12)
+		const cipher = createCipheriv('aes-256-gcm', this.key, iv)
+		const data = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+		const tag = cipher.getAuthTag()
+		return `local:${iv.toString('hex')}:${tag.toString('hex')}:${data.toString('hex')}`
+	}
+
+	async decrypt(ciphertext: string): Promise<string> {
+		const parts = ciphertext.split(':')
+		if (parts.length !== 4 || parts[0] !== 'local') {
+			throw new VaultUnavailableError('local ciphertext expected (local:iv:tag:data)')
+		}
+		const [, ivHex, tagHex, dataHex] = parts as [string, string, string, string]
+		const decipher = createDecipheriv('aes-256-gcm', this.key, Buffer.from(ivHex, 'hex'))
+		decipher.setAuthTag(Buffer.from(tagHex, 'hex'))
+		try {
+			return Buffer.concat([
+				decipher.update(Buffer.from(dataHex, 'hex')),
+				decipher.final(),
+			]).toString('utf8')
+		} catch {
+			throw new VaultUnavailableError('local ciphertext failed authentication')
+		}
 	}
 }
 
