@@ -5,22 +5,22 @@ Each directory below is a single adapter that implements `Connector`
 `@agent-canvas/connector-core`. Every adapter passes the conformance
 suite and lives behind one strict interface.
 
-## Phase 1 (initial)
+## Adapters
 
 - `github/` — GitHub App installation tokens, PRs, issues, comments, commits
-- `linear/` — issues, projects, comments
-- `slack/` — messages, threads, channel triggers
-- `codex/` (provider) — OpenAI Codex managed agent
+- `mockProvider.ts` — in-process provider for local smoke testing; registered
+  only when `ENABLE_MOCK_PROVIDER=true`
 
-## Phase 1 (follow-up adapters)
+The framework helpers shared by every adapter:
 
-- `discord/` — server channels, threads
-- `graphite/` — stacked PRs, reviews
-- `railway/` — deployments, environment management
-- `vercel/` — deployments, project management (NOT the platform we run on; this is
-  Vercel-as-an-integration the agent calls out to)
-- `supabase/` — database queries, function invocations, project management
-- `openhands/` (provider) — OpenHands cloud managed agent
+- `_oauth.ts` — OAuth authorize / callback / refresh / revoke scaffolding
+- `_crypto.ts` — signature and state-token primitives
+- `_stubs.ts` — typed stubs an adapter overrides as it is implemented
+
+> This self-host build ships the GitHub connector only. Additional
+> connectors (Linear, Slack, Discord, etc.) were removed to keep the
+> deployment lightweight; add a new directory following the pattern
+> below to wire another provider.
 
 ## Pattern
 
@@ -41,6 +41,5 @@ github/
     [per-tool unit tests]
 ```
 
-Adapter implementation work belongs in follow-up PRs (each needs the
-provider's OAuth app + webhook secrets configured in Vercel + a real
-test account).
+Each new adapter needs the provider's OAuth app + webhook secret
+configured in the environment plus a real test account.
