@@ -5,22 +5,44 @@ on:
   push:
     branches: [main]
 
+# Cancel superseded runs on the same ref so a fast push does not queue
+# stale builds.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
+  build-test:
+    name: typecheck · test · build (node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build
 
   e2e:
+    name: canvas e2e (playwright)
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: build-test
+    # The dev orchestrator refuses to boot without these; dummy values are
+    # fine because the onboarding flow under test never verifies a token.
+    env:
+      JWT_SECRET: ci_dummy_jwt_secret_000000000000000000000000000000
+      SSE_TOKEN_SECRET: ci_dummy_sse_secret_000000000000000000000000000
+      AUTH_STATE_SECRET: ci_dummy_state_secret_00000000000000000000000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -1,0 +1,36 @@
+name: deploy
+
+# Deploy main to Railway after it is pushed. Opt-in: the job only runs
+# when the repository variable RAILWAY_DEPLOY is set to "true" and the
+# secret RAILWAY_TOKEN (a Railway project token) is configured. If you
+# use Railway's native GitHub integration instead, leave RAILWAY_DEPLOY
+# unset and this job is skipped.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  railway:
+    name: railway up
+    runs-on: ubuntu-latest
+    if: ${{ vars.RAILWAY_DEPLOY == 'true' }}
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+      - name: Deploy
+        run: railway up --ci
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

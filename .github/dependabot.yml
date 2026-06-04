@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # npm workspaces — one weekly grouped PR keeps the dependency churn low.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      dependencies:
+        patterns: ['*']
+
+  # Keep the GitHub Actions in the workflows above current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
