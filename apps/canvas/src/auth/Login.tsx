@@ -35,13 +35,15 @@ export interface LoginProps {
 	readonly cancelled?: boolean
 }
 
-type AuthMode = 'loading' | 'github' | 'open'
+type AuthMode = 'loading' | 'github' | 'open' | 'error'
 
 export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 	const [loading, setLoading] = useState(false)
 	const [mode, setMode] = useState<AuthMode>('loading')
 	const [handle, setHandle] = useState('')
 	const [joinError, setJoinError] = useState<string | null>(null)
+	// Bumped by the Retry button to re-run the auth-config fetch.
+	const [reloadKey, setReloadKey] = useState(0)
 
 	useEffect(() => {
 		// If the URL has the cancelled flag, strip it so a refresh
@@ -54,21 +56,27 @@ export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 	}, [cancelled])
 
 	useEffect(() => {
-		// Resolve the deployment's auth mode. Any failure falls back to
-		// the GitHub flow — the safe default that never exposes open join.
+		// Resolve the deployment's auth mode. A failure here means the
+		// orchestrator is unreachable or misconfigured; surface that as a
+		// distinct 'error' state with a retry rather than silently showing
+		// a GitHub button that cannot complete.
 		let cancelledFetch = false
+		setMode('loading')
 		fetch(`${orchestratorUrl}/api/auth/config`)
-			.then((r) => (r.ok ? r.json() : { auth_mode: 'github' }))
+			.then((r) => {
+				if (!r.ok) throw new Error(`auth config ${r.status}`)
+				return r.json()
+			})
 			.then((cfg: { auth_mode?: string }) => {
 				if (!cancelledFetch) setMode(cfg.auth_mode === 'open' ? 'open' : 'github')
 			})
 			.catch(() => {
-				if (!cancelledFetch) setMode('github')
+				if (!cancelledFetch) setMode('error')
 			})
 		return () => {
 			cancelledFetch = true
 		}
-	}, [orchestratorUrl])
+	}, [orchestratorUrl, reloadKey])
 
 	function handleSignIn() {
 		setLoading(true)
@@ -175,7 +183,44 @@ export function Login({ orchestratorUrl, cancelled = false }: LoginProps) {
 					</div>
 				)}
 
-				{mode === 'open' ? (
+				{mode === 'error' ? (
+					<div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+						<div
+							role="alert"
+							style={{
+								padding: 'var(--space-3)',
+								background: 'var(--live-soft)',
+								border: '1px solid var(--live)',
+								borderRadius: 'var(--radius-md)',
+								fontSize: 'var(--font-12)',
+								color: 'var(--text-strong)',
+								lineHeight: 1.5,
+							}}
+						>
+							Can’t reach the orchestrator at{' '}
+							<code style={{ fontFamily: 'var(--font-mono)' }}>{orchestratorUrl}</code>. Make
+							sure it is running and reachable, then retry.
+						</div>
+						<button
+							type="button"
+							onClick={() => setReloadKey((k) => k + 1)}
+							style={{
+								height: 44,
+								padding: '0 var(--space-4)',
+								background: 'var(--text-strong)',
+								color: '#0A0A0A',
+								border: 'none',
+								borderRadius: 'var(--radius-md)',
+								fontFamily: 'var(--font-ui)',
+								fontSize: 'var(--font-14)',
+								fontWeight: 500,
+								cursor: 'pointer',
+							}}
+						>
+							Retry
+						</button>
+					</div>
+				) : mode === 'open' ? (
 					<form onSubmit={handleJoin} style={{ display: 'grid', gap: 'var(--space-3)' }}>
 						<input
 							type="text"

@@ -16,7 +16,9 @@ export interface AgentApiRecord {
 	readonly owner_user_id: string
 	readonly name: string
 	readonly purpose: string
+	readonly provider: string
 	readonly model: string
+	readonly model_base_url: string | null
 	readonly system_prompt: string
 	readonly capabilities: NewAgentDraft['capabilities']
 	readonly created_at: string
@@ -64,7 +66,9 @@ export class AgentApi {
 				workspace_id: this.opts.workspaceId,
 				name: draft.name,
 				purpose: draft.purpose,
+				provider: draft.provider,
 				model: draft.model,
+				model_base_url: draft.model_base_url,
 				system_prompt: draft.system_prompt,
 				capabilities: draft.capabilities,
 			}),
@@ -151,8 +155,10 @@ export class AgentApi {
 		// reads these and uses them instead of its own env vars.
 		// sessionStorage is the source of truth (see SettingsDrawer).
 		const anthropic = readBYOK('agent-canvas:anthropic_api_key')
+		const openai = readBYOK('agent-canvas:openai_api_key')
 		const e2b = readBYOK('agent-canvas:e2b_api_key')
 		if (anthropic) out['x-anthropic-api-key'] = anthropic
+		if (openai) out['x-openai-api-key'] = openai
 		if (e2b) out['x-e2b-api-key'] = e2b
 		return out
 	}

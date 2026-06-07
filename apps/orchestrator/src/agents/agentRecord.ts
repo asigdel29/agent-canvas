@@ -16,6 +16,10 @@
  */
 
 import type { UserId } from '@agent-canvas/orchestrator-types'
+import { isProvider, type Provider } from './modelClient.js'
+import { validateModelBaseUrl } from './modelBaseUrl.js'
+
+export type { Provider } from './modelClient.js'
 
 /**
  * Branded string ids. Same pattern as RunId / RoomId in
@@ -27,17 +31,24 @@ export type WorkspaceId = string & { readonly __brand: 'WorkspaceId' }
 export type ApprovalId = string & { readonly __brand: 'ApprovalId' }
 
 /**
- * The set of supported model ids. Kept in sync with the NewAgentModal
- * radio list in apps/canvas/src/agent/NewAgentModal.tsx. Adding a
- * model requires updating both the modal and this enum so the
- * orchestrator can validate.
+ * A model identifier. Each {@link Provider} owns its own id namespace
+ * (Anthropic uses `claude-*`; an OpenAI-compatible endpoint uses
+ * whatever ids that server exposes, e.g. `gpt-4o`, `gemini-2.0-flash`,
+ * `llama-3.1-70b`). The orchestrator therefore treats the id as an
+ * opaque, bounded-length string rather than a closed enum, and routes
+ * by {@link AgentRecord.provider} instead.
  */
-export type ModelId =
-	| 'claude-opus-4-7'
-	| 'claude-sonnet-4-6'
-	| 'claude-haiku-4-5-20251001'
+export type ModelId = string
 
-export const SUPPORTED_MODELS = [
+/** Upper bound on a model id length, for storage and abuse sanity. */
+export const MAX_MODEL_ID_LENGTH = 100
+
+/**
+ * Anthropic model presets the canvas offers by default. Advisory only —
+ * the orchestrator accepts any non-empty id so newer models work without
+ * a server change. Kept loosely in step with the NewAgentModal radios.
+ */
+export const ANTHROPIC_PRESET_MODELS = [
 	'claude-opus-4-7',
 	'claude-sonnet-4-6',
 	'claude-haiku-4-5-20251001',
@@ -81,7 +92,15 @@ export interface AgentRecord {
 	readonly owner_user_id: UserId
 	readonly name: string
 	readonly purpose: string
+	/** Which model family the run loop uses; routes client construction. */
+	readonly provider: Provider
 	readonly model: ModelId
+	/**
+	 * For `provider === 'openai'`, the OpenAI-compatible API root the
+	 * orchestrator posts to (e.g. `https://api.openai.com/v1`). Null for
+	 * the native Anthropic provider, which has a fixed endpoint.
+	 */
+	readonly model_base_url: string | null
 	readonly system_prompt: string
 	readonly capabilities: AgentCapabilities
 	readonly created_at: string // ISO 8601
@@ -98,7 +117,11 @@ export interface CreateAgentInput {
 	readonly owner_user_id: UserId
 	readonly name: string
 	readonly purpose: string
+	/** Defaults to `'anthropic'` when omitted, for backward compatibility. */
+	readonly provider?: Provider
 	readonly model: ModelId
+	/** Required when `provider === 'openai'`; ignored otherwise. */
+	readonly model_base_url?: string | null
 	readonly system_prompt: string
 	readonly capabilities: AgentCapabilities
 }
@@ -112,7 +135,9 @@ export interface CreateAgentInput {
 export interface UpdateAgentInput {
 	readonly name?: string
 	readonly purpose?: string
+	readonly provider?: Provider
 	readonly model?: ModelId
+	readonly model_base_url?: string | null
 	readonly system_prompt?: string
 	readonly capabilities?: AgentCapabilities
 }
@@ -164,7 +189,12 @@ export class AgentValidationError extends Error {
  * Rules:
  *   - name      non-empty, ≤ 120 chars
  *   - purpose   ≤ 280 chars (twitter-len; long enough, short enough)
- *   - model     must be in SUPPORTED_MODELS
+ *   - provider  when present, must be a known {@link Provider}
+ *   - model     non-empty, ≤ MAX_MODEL_ID_LENGTH (ids are opaque per
+ *               provider, so no closed-set check)
+ *   - model_base_url   required for the `openai` provider and must pass
+ *               the SSRF guard ({@link validateModelBaseUrl}); rejected
+ *               for `anthropic`, which has a fixed endpoint
  *   - system_prompt   ≤ 32 KiB (storage sanity; tokenizers cap higher)
  *   - capabilities.mcp_servers each must have a non-empty id and a
  *     parseable https/http URL
@@ -175,8 +205,26 @@ export function validateCreateInput(input: CreateAgentInput): void {
 	if (input.purpose.length > 280) {
 		throw new AgentValidationError('purpose', 'max 280 characters')
 	}
-	if (!SUPPORTED_MODELS.includes(input.model as ModelId)) {
-		throw new AgentValidationError('model', `must be one of: ${SUPPORTED_MODELS.join(', ')}`)
+	if (input.provider !== undefined && !isProvider(input.provider)) {
+		throw new AgentValidationError('provider', "must be 'anthropic' or 'openai'")
+	}
+	const provider: Provider = input.provider ?? 'anthropic'
+	if (!input.model.trim()) throw new AgentValidationError('model', 'must not be empty')
+	if (input.model.length > MAX_MODEL_ID_LENGTH) {
+		throw new AgentValidationError('model', `max ${MAX_MODEL_ID_LENGTH} characters`)
+	}
+	if (provider === 'openai') {
+		const baseUrl = input.model_base_url?.trim()
+		if (!baseUrl) {
+			throw new AgentValidationError(
+				'model_base_url',
+				'required for the openai provider'
+			)
+		}
+		const check = validateModelBaseUrl(baseUrl)
+		if (!check.ok) {
+			throw new AgentValidationError('model_base_url', `rejected: ${check.reason}`)
+		}
 	}
 	if (input.system_prompt.length > 32 * 1024) {
 		throw new AgentValidationError('system_prompt', 'max 32 KiB')

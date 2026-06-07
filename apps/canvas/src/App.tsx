@@ -411,7 +411,9 @@ export function App() {
 		setAgentModalInitial({
 			name: agent.name,
 			purpose: agent.purpose,
-			model: agent.model as NewAgentDraft['model'],
+			provider: (agent.provider as NewAgentDraft['provider']) ?? 'anthropic',
+			model: agent.model,
+			model_base_url: agent.model_base_url ?? null,
 			system_prompt: agent.system_prompt,
 			capabilities: agent.capabilities,
 		})

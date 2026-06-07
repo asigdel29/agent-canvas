@@ -16,6 +16,7 @@ import {
 	AgentNotFoundError,
 	type UpdateAgentInput,
 } from '../../dist/agents/agentRecord.js'
+import { validateModelBaseUrl } from '../../dist/agents/modelBaseUrl.js'
 import { TenancyForbiddenError } from '../../dist/tenancy/tenancyTypes.js'
 import type { UserId } from '@agent-canvas/orchestrator-types'
 
@@ -74,6 +75,19 @@ export default async function handler(req: Request): Promise<Response> {
 			patch = (await req.json()) as UpdateAgentInput
 		} catch {
 			return withCorsHeaders(req, jsonError(400, 'malformed_json'))
+		}
+		// SSRF guard: a base URL supplied via PATCH must pass the same
+		// check as create-time, so a private/loopback target can never be
+		// persisted. (The model-client factory re-checks at run start as
+		// defense-in-depth.)
+		if (patch.model_base_url) {
+			const check = validateModelBaseUrl(patch.model_base_url)
+			if (!check.ok) {
+				return withCorsHeaders(
+					req,
+					jsonError(400, 'validation_failed', `model_base_url: rejected: ${check.reason}`)
+				)
+			}
 		}
 		try {
 			const updated = await store.update(id, patch)

@@ -115,10 +115,53 @@ describe('validateCreateInput', () => {
 		)
 	})
 
-	it('rejects unknown model', () => {
+	it('rejects an empty model id', () => {
 		expect(() =>
-			validateCreateInput(fixture({ model: 'gpt-4' as never }))
+			validateCreateInput(fixture({ model: '   ' }))
 		).toThrow(expect.objectContaining({ field: 'model' }))
+	})
+
+	it('accepts an opaque model id for the anthropic provider', () => {
+		// Model ids are no longer a closed enum; a non-empty id passes.
+		expect(() =>
+			validateCreateInput(fixture({ model: 'claude-opus-4-7' }))
+		).not.toThrow()
+	})
+
+	it('rejects an unknown provider', () => {
+		expect(() =>
+			validateCreateInput(fixture({ provider: 'azure' as never }))
+		).toThrow(expect.objectContaining({ field: 'provider' }))
+	})
+
+	it('rejects the openai provider without a base URL', () => {
+		expect(() =>
+			validateCreateInput(fixture({ provider: 'openai', model: 'gpt-4o' }))
+		).toThrow(expect.objectContaining({ field: 'model_base_url' }))
+	})
+
+	it('rejects an openai base URL pointing at a private address', () => {
+		expect(() =>
+			validateCreateInput(
+				fixture({
+					provider: 'openai',
+					model: 'gpt-4o',
+					model_base_url: 'http://169.254.169.254/v1',
+				})
+			)
+		).toThrow(expect.objectContaining({ field: 'model_base_url' }))
+	})
+
+	it('accepts an openai provider with an https base URL', () => {
+		expect(() =>
+			validateCreateInput(
+				fixture({
+					provider: 'openai',
+					model: 'gpt-4o',
+					model_base_url: 'https://api.openai.com/v1',
+				})
+			)
+		).not.toThrow()
 	})
 
 	it('rejects system_prompt > 32 KiB', () => {

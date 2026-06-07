@@ -63,11 +63,16 @@ Open the server URL, choose an auth mode, paste your Claude key in Settings, and
 Set `AUTH_MODE` in `./.env`:
 
 - `open` — teammates join with just a display name. No GitHub app, no external login. Open mode drops per-workspace isolation, so run it behind a trusted network boundary.
-- `github` (default) — set `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` from a [GitHub OAuth app](https://github.com/settings/developers) (callback `<origin>/api/auth/github/callback`).
+- `github` (default) — create a [GitHub OAuth app](https://github.com/settings/developers), then set `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`, plus `CANVAS_ORIGIN` and `PUBLIC_ORCHESTRATOR_ORIGIN`. The app's **Authorization callback URL** must equal `${PUBLIC_ORCHESTRATOR_ORIGIN}/api/auth/github/callback`. For local dev that is `http://localhost:3000/api/auth/github/callback`, with Homepage URL `http://localhost:5173`.
 
 ### AI keys
 
-There is no AI-provider login. Each user pastes their own Claude key in Settings; it stays in their browser and travels per-request. Optionally set `ANTHROPIC_API_KEY` as a shared server-side fallback. Computer-use needs an `E2B_API_KEY` (also pasteable per user).
+There is no AI-provider login — each user brings their own key in Settings; it stays in their browser and travels per-request. Two providers are supported per agent (chosen in the New agent dialog):
+
+- **Anthropic** — native Claude models. Paste a Claude key in Settings, or set `ANTHROPIC_API_KEY` as a shared server-side fallback.
+- **OpenAI-compatible** — any `/chat/completions` endpoint, selected by a base URL: OpenAI, Gemini's OpenAI surface, Groq, OpenRouter, Together, or a local server (LM Studio, Ollama). Paste an OpenAI-compatible key in Settings, or set `OPENAI_API_KEY` as the fallback. The orchestrator SSRF-checks the base URL; to allow a local `http://127.0.0.1` server set `MODEL_BASE_URL_ALLOW_HTTP=true` and `MODEL_BASE_URL_ALLOW_PRIVATE=true` (dev only).
+
+Computer-use needs an `E2B_API_KEY` (also pasteable per user) and is available on the Anthropic provider only.
 
 ## Deploy
 

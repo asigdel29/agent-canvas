@@ -25,6 +25,7 @@ import {
 	type AgentRecord,
 	AgentNotFoundError,
 	type CreateAgentInput,
+	type Provider,
 	type UpdateAgentInput,
 	type WorkspaceId,
 } from './agentRecord.js'
@@ -54,7 +55,9 @@ export class InMemoryAgentStore implements AgentStore {
 			owner_user_id: input.owner_user_id,
 			name: input.name,
 			purpose: input.purpose,
+			provider: input.provider ?? 'anthropic',
 			model: input.model,
+			model_base_url: input.model_base_url ?? null,
 			system_prompt: input.system_prompt,
 			capabilities: input.capabilities,
 			created_at: now,
@@ -117,7 +120,9 @@ interface AgentRow {
 	owner_user_id: string
 	name: string
 	purpose: string
+	provider: string
 	model: string
+	model_base_url: string | null
 	system_prompt: string
 	cap_computer_use: boolean
 	cap_computer_use_provider: string
@@ -136,7 +141,9 @@ function rowToRecord(row: AgentRow): AgentRecord {
 		owner_user_id: row.owner_user_id as AgentRecord['owner_user_id'],
 		name: row.name,
 		purpose: row.purpose,
+		provider: row.provider as Provider,
 		model: row.model as AgentRecord['model'],
+		model_base_url: row.model_base_url,
 		system_prompt: row.system_prompt,
 		capabilities: {
 			computer_use: {
@@ -164,7 +171,8 @@ export class PostgresAgentStore implements AgentStore {
 		const id = `ag_${randomUUID()}`
 		const rows = await this.sql<AgentRow[]>`
 			INSERT INTO agents (
-				id, workspace_id, owner_user_id, name, purpose, model, system_prompt,
+				id, workspace_id, owner_user_id, name, purpose,
+				provider, model, model_base_url, system_prompt,
 				cap_computer_use, cap_computer_use_provider,
 				cap_browser_use, cap_browser_use_persist,
 				cap_mcp_servers
@@ -174,7 +182,9 @@ export class PostgresAgentStore implements AgentStore {
 				${input.owner_user_id},
 				${input.name},
 				${input.purpose},
+				${input.provider ?? 'anthropic'},
 				${input.model},
+				${input.model_base_url ?? null},
 				${input.system_prompt},
 				${input.capabilities.computer_use.enabled},
 				${input.capabilities.computer_use.provider},
@@ -213,7 +223,9 @@ export class PostgresAgentStore implements AgentStore {
 			UPDATE agents SET
 				name           = COALESCE(${patch.name ?? null}, name),
 				purpose        = COALESCE(${patch.purpose ?? null}, purpose),
+				provider       = COALESCE(${patch.provider ?? null}, provider),
 				model          = COALESCE(${patch.model ?? null}, model),
+				model_base_url = COALESCE(${patch.model_base_url ?? null}, model_base_url),
 				system_prompt  = COALESCE(${patch.system_prompt ?? null}, system_prompt),
 				cap_computer_use          = COALESCE(${caps?.computer_use.enabled ?? null}, cap_computer_use),
 				cap_computer_use_provider = COALESCE(${caps?.computer_use.provider ?? null}, cap_computer_use_provider),

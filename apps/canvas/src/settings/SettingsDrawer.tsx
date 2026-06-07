@@ -41,41 +41,47 @@ import { WebhooksSection } from './WebhooksSection.js'
 
 export const SETTINGS_STORAGE = {
 	anthropicKey: 'agent-canvas:anthropic_api_key',
+	openaiKey: 'agent-canvas:openai_api_key',
 	e2bKey: 'agent-canvas:e2b_api_key',
 } as const
 
 export interface SettingsValues {
 	anthropic_api_key: string
+	openai_api_key: string
 	e2b_api_key: string
 }
 
-/** Read both keys from sessionStorage; returns empty strings for unset. */
+const EMPTY_SETTINGS: SettingsValues = {
+	anthropic_api_key: '',
+	openai_api_key: '',
+	e2b_api_key: '',
+}
+
+/** Read all keys from sessionStorage; returns empty strings for unset. */
 export function readSettings(): SettingsValues {
-	if (typeof window === 'undefined') return { anthropic_api_key: '', e2b_api_key: '' }
+	if (typeof window === 'undefined') return { ...EMPTY_SETTINGS }
 	try {
 		return {
 			anthropic_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.anthropicKey) ?? '',
+			openai_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.openaiKey) ?? '',
 			e2b_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.e2bKey) ?? '',
 		}
 	} catch {
-		return { anthropic_api_key: '', e2b_api_key: '' }
+		return { ...EMPTY_SETTINGS }
 	}
 }
 
-/** Write both keys to sessionStorage. Empty string clears. */
+/** Write all keys to sessionStorage. An empty string clears that key. */
 export function writeSettings(values: SettingsValues): void {
 	if (typeof window === 'undefined') return
+	const set = (storageKey: string, value: string) => {
+		if (value) window.sessionStorage.setItem(storageKey, value)
+		else window.sessionStorage.removeItem(storageKey)
+	}
 	try {
-		if (values.anthropic_api_key) {
-			window.sessionStorage.setItem(SETTINGS_STORAGE.anthropicKey, values.anthropic_api_key)
-		} else {
-			window.sessionStorage.removeItem(SETTINGS_STORAGE.anthropicKey)
-		}
-		if (values.e2b_api_key) {
-			window.sessionStorage.setItem(SETTINGS_STORAGE.e2bKey, values.e2b_api_key)
-		} else {
-			window.sessionStorage.removeItem(SETTINGS_STORAGE.e2bKey)
-		}
+		set(SETTINGS_STORAGE.anthropicKey, values.anthropic_api_key)
+		set(SETTINGS_STORAGE.openaiKey, values.openai_api_key)
+		set(SETTINGS_STORAGE.e2bKey, values.e2b_api_key)
 	} catch {
 		// sessionStorage disabled (private mode / sandboxed iframe) — silent fail
 	}
@@ -107,6 +113,7 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 	function save() {
 		const cleaned: SettingsValues = {
 			anthropic_api_key: values.anthropic_api_key.trim(),
+			openai_api_key: values.openai_api_key.trim(),
 			e2b_api_key: values.e2b_api_key.trim(),
 		}
 		writeSettings(cleaned)
@@ -115,6 +122,7 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 	}
 
 	const anthropicShape = isAnthropicShape(values.anthropic_api_key)
+	const openaiShape = isOpenAiShape(values.openai_api_key)
 	const e2bShape = isE2BShape(values.e2b_api_key)
 
 	return (
@@ -168,6 +176,16 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 				onChange={(v) =>
 					setValues((prev) => ({ ...prev, anthropic_api_key: v }))
 				}
+			/>
+
+			<KeyField
+				label="OpenAI-compatible API key"
+				placeholder="sk-..."
+				required={false}
+				hint="Optional. Used by agents on the OpenAI-compatible provider (OpenAI, Gemini, Groq, OpenRouter, local). Set the endpoint per-agent in the New agent dialog."
+				value={values.openai_api_key}
+				shapeOk={openaiShape}
+				onChange={(v) => setValues((prev) => ({ ...prev, openai_api_key: v }))}
 			/>
 
 			<KeyField
@@ -305,6 +323,15 @@ function isAnthropicShape(v: string): 'ok' | 'wrong-shape' | 'empty' {
 	const t = v.trim()
 	if (t.length === 0) return 'empty'
 	return t.startsWith('sk-ant-') && t.length > 16 ? 'ok' : 'wrong-shape'
+}
+
+/**
+ * OpenAI-compatible keys vary widely by provider (OpenAI `sk-…`, Gemini,
+ * Groq `gsk_…`, OpenRouter `sk-or-…`, local servers with no prefix), so
+ * the only soft check is non-empty. Validity is confirmed on first run.
+ */
+function isOpenAiShape(v: string): 'ok' | 'wrong-shape' | 'empty' {
+	return v.trim().length === 0 ? 'empty' : 'ok'
 }
 
 function isE2BShape(v: string): 'ok' | 'wrong-shape' | 'empty' {

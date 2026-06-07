@@ -74,7 +74,16 @@ export function validateWebhookUrl(input: string): ValidateUrlResult {
 	return { ok: true }
 }
 
-function isPrivateOrLoopback(host: string): boolean {
+/**
+ * True when `host` is a loopback, link-local, or RFC-1918 private
+ * address (or the `localhost` name). Exported so other outbound-fetch
+ * call sites (e.g. the model base-URL guard) share one definition of
+ * "private" rather than maintaining a second, drift-prone copy.
+ *
+ * @param host a bare hostname or IP literal (IPv6 brackets tolerated).
+ * @return true when the host must be treated as SSRF surface.
+ */
+export function isPrivateOrLoopback(host: string): boolean {
 	// Node's URL.hostname preserves surrounding brackets for IPv6
 	// literals ('[::1]', '[fe80::1]'). Strip them so the equality
 	// checks below see the bare address.

@@ -47,11 +47,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { RunEvent, RunId, RoomId } from '@agent-canvas/orchestrator-types'
 
-import type {
-	AnthropicClient,
-	ContentBlock,
-	Message,
-} from './anthropicClient.js'
+import type { ContentBlock, Message, ModelClient } from './modelClient.js'
 import type { AgentRecord } from './agentRecord.js'
 import type { ToolCatalog, ToolResult } from './toolRegistry.js'
 
@@ -127,7 +123,8 @@ export interface CancellationSignal {
 }
 
 export interface RunLoopOptions {
-	readonly anthropic: AnthropicClient
+	/** The provider-agnostic model client the loop drives each turn. */
+	readonly model: ModelClient
 	readonly catalog: ToolCatalog
 	readonly sink: RunEventSink
 	readonly approvalGate: ApprovalGate
@@ -143,7 +140,7 @@ export async function runLoop(
 	input: RunStartInput,
 	opts: RunLoopOptions
 ): Promise<RunSummary> {
-	const { anthropic, catalog, sink, approvalGate, cancellation } = opts
+	const { model: modelClient, catalog, sink, approvalGate, cancellation } = opts
 	const maxIterations = input.max_iterations ?? DEFAULT_MAX_ITERATIONS
 	const maxTokens = input.max_tokens_per_call ?? DEFAULT_MAX_TOKENS
 	const temperature = input.temperature ?? DEFAULT_TEMPERATURE
@@ -196,7 +193,7 @@ export async function runLoop(
 			}
 			if (input.agent.system_prompt) request.system = input.agent.system_prompt
 			if (catalog.schemas.length > 0) request.tools = catalog.schemas
-			const response = await anthropic.createMessage(request)
+			const response = await modelClient.createMessage(request)
 			inputTokens += response.usage.input_tokens
 			outputTokens += response.usage.output_tokens
 
