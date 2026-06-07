@@ -24,11 +24,14 @@
  * @author asigdel29
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Tldraw, type Editor } from 'tldraw'
-import 'tldraw/tldraw.css'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Editor } from 'tldraw'
 
-import { AgentShapeUtil } from './agent/AgentShapeUtil.js'
+// The tldraw editor (~2 MB with its CSS) is the heaviest dependency and
+// is not needed on the sign-in / onboarding path. Load it on demand so
+// the initial bundle stays small; see canvas/CanvasStage.
+const CanvasStage = lazy(() => import('./canvas/CanvasStage.js'))
+
 import {
 	AgentApi,
 	type AgentApiRecord,
@@ -71,7 +74,6 @@ import { ZoomCluster } from './layout/ZoomCluster.js'
 import { RoomEventClient, type RunEventPayload } from './sync/RoomEventClient.js'
 import { ORCHESTRATOR_URL } from './config.js'
 
-const SHAPE_UTILS = [AgentShapeUtil]
 const MAX_LIVE_EVENTS = 50
 
 const SESSION_STORAGE_KEY = 'agent-canvas:session'
@@ -774,15 +776,16 @@ export function App() {
 						}}
 					/>
 				) : (
-					<Tldraw
-						shapeUtils={SHAPE_UTILS}
-						onMount={(editor) => {
-							editorRef.current = editor
-							if (realtime) {
-								ensureShapesForRecords(editor, agents, realtime.room)
-							}
-						}}
-					/>
+					<Suspense fallback={<CanvasLoading />}>
+						<CanvasStage
+							onMount={(editor) => {
+								editorRef.current = editor
+								if (realtime) {
+									ensureShapesForRecords(editor, agents, realtime.room)
+								}
+							}}
+						/>
+					</Suspense>
 				)}
 			</Shell>
 			<ErrorToast cards={errorCards} onDismiss={dismissError} />
@@ -807,6 +810,31 @@ export function App() {
 				onClose={() => setFeedbackOpen(false)}
 			/>
 		</>
+	)
+}
+
+/**
+ * Placeholder shown while the lazily-loaded tldraw editor chunk
+ * downloads. Fills the canvas area on the app's dark surface so the
+ * layout does not jump when the editor mounts.
+ */
+function CanvasLoading() {
+	return (
+		<div
+			role="status"
+			aria-label="Loading the canvas"
+			style={{
+				position: 'absolute',
+				inset: 0,
+				display: 'grid',
+				placeItems: 'center',
+				background: 'var(--surface)',
+				color: 'var(--text-muted)',
+				fontSize: 'var(--font-13)',
+			}}
+		>
+			Loading canvas…
+		</div>
 	)
 }
 
