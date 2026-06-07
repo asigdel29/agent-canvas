@@ -2,7 +2,7 @@
   "name": "@agent-canvas/canvas",
   "version": "0.0.0",
   "private": true,
-  "description": "Multiplayer canvas client built on tldraw with custom AgentShape rendering.",
+  "description": "Multiplayer canvas client with a custom infinite-canvas surface for agent cards.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,8 +16,7 @@
   "dependencies": {
     "@agent-canvas/orchestrator-types": "*",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "tldraw": "^5.1.0"
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

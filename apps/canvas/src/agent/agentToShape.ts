@@ -9,14 +9,13 @@
  *   shapePropsToPatch     when the user renames or edits the shape
  *                         on the canvas, derive the PATCH body
  *
- * The agent id becomes the tldraw shape id (with the `shape:`
- * prefix tldraw requires). This makes lookups O(1) when an event
- * arrives for an agent: the canvas knows exactly which shape to
- * update.
+ * The agent id becomes the canvas shape id (with a `shape:` prefix).
+ * This makes lookups O(1) when an event arrives for an agent: the
+ * canvas knows exactly which shape to update.
  * @author asigdel29
  */
 
-import type { AgentShapeProps } from './AgentShapeUtil.js'
+import type { AgentShapeProps } from '../canvas/agentShape.js'
 import type { AgentApiRecord } from './agentApi.js'
 import {
 	type AgentCapabilities,
@@ -26,8 +25,8 @@ import {
 export type ShapeIdString = `shape:${string}`
 
 /**
- * Wraps an agent id with the tldraw `shape:` prefix. Stable so the
- * canvas can look up the shape by agent id without an extra map.
+ * Wraps an agent id with the `shape:` prefix. Stable so the canvas can
+ * look up the shape by agent id without an extra map.
  */
 export function agentShapeId(agentId: string): ShapeIdString {
 	return `shape:${agentId}` as ShapeIdString
