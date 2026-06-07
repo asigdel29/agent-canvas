@@ -109,7 +109,7 @@ export default async function handler(req: Request): Promise<Response> {
 				jsonError(504, 'probe_timeout', `no response from ${url.host} within 5s`)
 			)
 		}
-		return withCorsHeaders(req, jsonError(502, 'probe_failed', msg.slice(0, 320)))
+		return withCorsHeaders(req, jsonError(502, 'probe_failed', 'upstream probe failed'))
 	}
 }
 
