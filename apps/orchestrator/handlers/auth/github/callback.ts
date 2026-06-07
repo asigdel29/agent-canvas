@@ -76,9 +76,8 @@ export default async function handler(req: Request): Promise<Response> {
 	let access: string
 	try {
 		access = await exchangeCode(code, clientId, clientSecret, callbackUrl)
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err)
-		return jsonError(502, 'github_token_exchange_failed', msg)
+	} catch {
+		return jsonError(502, 'github_token_exchange_failed')
 	}
 
 	// Read the GitHub user. We need a stable identifier; login can
@@ -87,9 +86,8 @@ export default async function handler(req: Request): Promise<Response> {
 	let user: GitHubUser
 	try {
 		user = await fetchGitHubUser(access)
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err)
-		return jsonError(502, 'github_user_fetch_failed', msg)
+	} catch {
+		return jsonError(502, 'github_user_fetch_failed')
 	}
 
 	// Upsert the user + ensure they have a solo workspace. This is
