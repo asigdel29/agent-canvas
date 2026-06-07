@@ -23,7 +23,7 @@ jobs:
       matrix:
         node-version: ['22', '24']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
@@ -44,7 +44,7 @@ jobs:
       SSE_TOKEN_SECRET: ci_dummy_sse_secret_000000000000000000000000000
       AUTH_STATE_SECRET: ci_dummy_state_secret_00000000000000000000000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
