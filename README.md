@@ -76,13 +76,25 @@ Computer-use needs an `E2B_API_KEY` (also pasteable per user) and is available o
 
 ## Deploy
 
-One Railway service plus a Postgres plugin (config in [`railway.json`](railway.json)):
+### Single service (simplest)
+
+One Railway service plus a Postgres plugin (config in [`railway.json`](railway.json)) serves both the API and the built canvas from one origin — no CORS:
 
 1. Create a Railway project from this repo and add the **Postgres** plugin.
 2. In the service **Variables**, set `DATABASE_URL=${{Postgres.DATABASE_URL}}`, the four secrets (`JWT_SECRET`, `SSE_TOKEN_SECRET`, `AUTH_STATE_SECRET`, `VAULT_KEY` — `openssl rand -hex 32` each), and `AUTH_MODE`.
 3. Deploy. Railway builds, runs migrations, starts the server, and health-checks `/api/health`.
 
 A CI workflow can also deploy on push to `main` — set the repo variable `RAILWAY_DEPLOY=true` and the secret `RAILWAY_TOKEN` (see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
+
+### Split: canvas on Vercel + orchestrator on Railway (lowest cost)
+
+Serve the static canvas from Vercel's CDN (free, immutable-cached) and run the orchestrator on Railway. Two origins, so CORS is configured explicitly.
+
+1. **Railway (orchestrator + Postgres)** — as above, but also set `PUBLIC_ORCHESTRATOR_ORIGIN` to the Railway URL, and `CANVAS_ORIGIN` + `ALLOWED_ORIGINS` to the Vercel canvas URL.
+2. **Vercel (canvas)** — import the repo; it uses [`vercel.json`](vercel.json) to build only `apps/canvas`. Set the **Production** env var `VITE_ORCHESTRATOR_URL` to the Railway URL (Vite inlines it at build; see [`apps/canvas/src/config.ts`](apps/canvas/src/config.ts)).
+3. **GitHub OAuth app** — Homepage = the Vercel URL; Authorization callback = `<railway-url>/api/auth/github/callback`.
+
+Because the two URLs reference each other, deploy Railway first, then Vercel with `VITE_ORCHESTRATOR_URL`, then set Railway's `CANVAS_ORIGIN`/`ALLOWED_ORIGINS` to the Vercel URL and restart.
 
 ## Configuration
 
