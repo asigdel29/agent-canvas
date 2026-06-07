@@ -181,10 +181,10 @@ const server = createServer(async (rawReq, rawRes) => {
 		const webRes = await handler(webReq)
 		await writeWebResponseToNode(webRes, rawRes)
 	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err)
+		console.error('[dev-server] handler error:', err)
 		rawRes.statusCode = 500
 		rawRes.setHeader('content-type', 'application/json')
-		rawRes.end(JSON.stringify({ error: 'handler_threw', detail: msg }))
+		rawRes.end(JSON.stringify({ error: 'handler_threw' }))
 	}
 })
 
