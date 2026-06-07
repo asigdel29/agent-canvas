@@ -25,6 +25,7 @@
 import { getRuntime } from '../dist/index.js'
 import { extractSession } from '../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../dist/http/cors.js'
+import { logger } from '../dist/observability/logger.js'
 
 const MAX_MESSAGE = 4000
 const MAX_EVENTS = 20
@@ -93,10 +94,12 @@ export default async function handler(req: Request): Promise<Response> {
 			} as never,
 		})
 	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err)
+		// Log the underlying failure server-side; the client gets a stable
+		// code with no internal detail.
+		logger.error('feedback_audit_write_failed', { err })
 		return withCorsHeaders(
 			req,
-			jsonError(500, 'audit_write_failed', msg.slice(0, 320))
+			jsonError(500, 'audit_write_failed', 'could not record feedback')
 		)
 	}
 

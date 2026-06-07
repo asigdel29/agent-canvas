@@ -16,7 +16,7 @@
  */
 
 const HEADERS_ALLOWED =
-	'authorization, content-type, traceparent, x-csrf-token, x-anthropic-api-key, x-e2b-api-key'
+	'authorization, content-type, traceparent, x-csrf-token, x-anthropic-api-key, x-openai-api-key, x-e2b-api-key'
 const METHODS_ALLOWED = 'GET, POST, PUT, DELETE, OPTIONS'
 const MAX_AGE_SECONDS = 600
 

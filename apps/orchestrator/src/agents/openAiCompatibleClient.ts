@@ -113,7 +113,7 @@ export class OpenAiCompatibleClient implements ModelClient {
 		if (!opts.apiKey) throw new Error('OpenAiCompatibleClient: apiKey is required')
 		if (!opts.baseUrl) throw new Error('OpenAiCompatibleClient: baseUrl is required')
 		this.apiKey = opts.apiKey
-		this.endpoint = `${opts.baseUrl.replace(/\/+$/, '')}/chat/completions`
+		this.endpoint = `${stripTrailingSlashes(opts.baseUrl)}/chat/completions`
 		this.fetchImpl = opts.fetchImpl ?? globalThis.fetch
 		this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
 	}
@@ -382,4 +382,20 @@ function safeParseArgs(raw: string): Readonly<Record<string, unknown>> {
 	} catch {
 		return {}
 	}
+}
+
+/**
+ * Remove any trailing `/` characters from a string.
+ *
+ * A backward scan rather than a `/\/+$/` regex: that pattern backtracks
+ * on a long run of slashes and is a polynomial-ReDoS hazard on the
+ * caller-supplied base URL. The linear scan has no such failure mode.
+ *
+ * @param value the string to trim.
+ * @return `value` without trailing slashes.
+ */
+function stripTrailingSlashes(value: string): string {
+	let end = value.length
+	while (end > 0 && value.charCodeAt(end - 1) === 47 /* '/' */) end -= 1
+	return value.slice(0, end)
 }
