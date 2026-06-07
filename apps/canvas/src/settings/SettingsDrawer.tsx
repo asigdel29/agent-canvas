@@ -49,33 +49,17 @@ export interface SettingsValues {
 	e2b_api_key: string
 }
 
-/** Read both keys from sessionStorage; returns empty strings for unset. */
+/** Sensitive API keys are not persisted in browser storage; always return empty defaults. */
 export function readSettings(): SettingsValues {
-	if (typeof window === 'undefined') return { anthropic_api_key: '', e2b_api_key: '' }
-	try {
-		return {
-			anthropic_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.anthropicKey) ?? '',
-			e2b_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.e2bKey) ?? '',
-		}
-	} catch {
-		return { anthropic_api_key: '', e2b_api_key: '' }
-	}
+	return { anthropic_api_key: '', e2b_api_key: '' }
 }
 
-/** Write both keys to sessionStorage. Empty string clears. */
-export function writeSettings(values: SettingsValues): void {
+/** Do not store sensitive keys in sessionStorage; clear any legacy persisted values. */
+export function writeSettings(_values: SettingsValues): void {
 	if (typeof window === 'undefined') return
 	try {
-		if (values.anthropic_api_key) {
-			window.sessionStorage.setItem(SETTINGS_STORAGE.anthropicKey, values.anthropic_api_key)
-		} else {
-			window.sessionStorage.removeItem(SETTINGS_STORAGE.anthropicKey)
-		}
-		if (values.e2b_api_key) {
-			window.sessionStorage.setItem(SETTINGS_STORAGE.e2bKey, values.e2b_api_key)
-		} else {
-			window.sessionStorage.removeItem(SETTINGS_STORAGE.e2bKey)
-		}
+		window.sessionStorage.removeItem(SETTINGS_STORAGE.anthropicKey)
+		window.sessionStorage.removeItem(SETTINGS_STORAGE.e2bKey)
 	} catch {
 		// sessionStorage disabled (private mode / sandboxed iframe) — silent fail
 	}
