@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install --no-audit --no-fund",
-  "buildCommand": "npm run build --workspace=@agent-canvas/canvas && rm -rf dist && cp -r apps/canvas/dist dist",
+  "buildCommand": "npm run build --workspace=@agent-canvas/canvas",
   "outputDirectory": "dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "headers": [
