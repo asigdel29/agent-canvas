@@ -10,19 +10,20 @@
  *
  * What it manages:
  *
- *   ANTHROPIC_API_KEY  required for any agent to run. Stored in
- *                      sessionStorage on the canvas; sent on each
- *                      request via x-anthropic-api-key header.
- *                      Orchestrator prefers the header over its env.
+ *   ANTHROPIC_API_KEY  required for any agent to run. Held in memory on
+ *                      the canvas; sent on each request via the
+ *                      x-anthropic-api-key header. The orchestrator
+ *                      prefers the header over its env.
  *
  *   E2B_API_KEY        optional, needed only for computer-use.
  *                      Same BYOK flow.
  *
- * Why sessionStorage and not localStorage:
- *   - Keys vanish on tab close, matching most BYOK products
- *   - No write to disk after the tab dies; lower blast radius
- *   - User can always re-paste if they reopen the tab
- *   - Sign-out can clear it trivially
+ * Why in-memory only (see keyStore.ts):
+ *   - Nothing sensitive is written to disk or Web Storage, so a stolen
+ *     profile or an XSS read of storage yields no keys (lowest blast
+ *     radius).
+ *   - Keys vanish on reload or tab close; the user re-pastes them. That
+ *     is the deliberate trade-off for not persisting a credential.
  *
  * Why not server-side per-user storage:
  *   - Requires a user_secrets table + encryption + access control
@@ -36,56 +37,11 @@
  */
 
 import { useState } from 'react'
+import { readApiKeys, writeApiKeys, type SettingsValues } from './keyStore.js'
 import { TokensSection } from './TokensSection.js'
 import { WebhooksSection } from './WebhooksSection.js'
 
-export const SETTINGS_STORAGE = {
-	anthropicKey: 'agent-canvas:anthropic_api_key',
-	openaiKey: 'agent-canvas:openai_api_key',
-	e2bKey: 'agent-canvas:e2b_api_key',
-} as const
-
-export interface SettingsValues {
-	anthropic_api_key: string
-	openai_api_key: string
-	e2b_api_key: string
-}
-
-const EMPTY_SETTINGS: SettingsValues = {
-	anthropic_api_key: '',
-	openai_api_key: '',
-	e2b_api_key: '',
-}
-
-/** Read all keys from sessionStorage; returns empty strings for unset. */
-export function readSettings(): SettingsValues {
-	if (typeof window === 'undefined') return { ...EMPTY_SETTINGS }
-	try {
-		return {
-			anthropic_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.anthropicKey) ?? '',
-			openai_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.openaiKey) ?? '',
-			e2b_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.e2bKey) ?? '',
-		}
-	} catch {
-		return { ...EMPTY_SETTINGS }
-	}
-}
-
-/** Write all keys to sessionStorage. An empty string clears that key. */
-export function writeSettings(values: SettingsValues): void {
-	if (typeof window === 'undefined') return
-	const set = (storageKey: string, value: string) => {
-		if (value) window.sessionStorage.setItem(storageKey, value)
-		else window.sessionStorage.removeItem(storageKey)
-	}
-	try {
-		set(SETTINGS_STORAGE.anthropicKey, values.anthropic_api_key)
-		set(SETTINGS_STORAGE.openaiKey, values.openai_api_key)
-		set(SETTINGS_STORAGE.e2bKey, values.e2b_api_key)
-	} catch {
-		// sessionStorage disabled (private mode / sandboxed iframe) — silent fail
-	}
-}
+export type { SettingsValues } from './keyStore.js'
 
 export interface SettingsDrawerProps {
 	readonly onClose: () => void
@@ -107,7 +63,7 @@ export interface SettingsDrawerProps {
 }
 
 export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: SettingsDrawerProps) {
-	const [values, setValues] = useState<SettingsValues>(() => readSettings())
+	const [values, setValues] = useState<SettingsValues>(() => readApiKeys())
 	const [savedAt, setSavedAt] = useState<number | null>(null)
 
 	function save() {
@@ -116,7 +72,7 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 			openai_api_key: values.openai_api_key.trim(),
 			e2b_api_key: values.e2b_api_key.trim(),
 		}
-		writeSettings(cleaned)
+		writeApiKeys(cleaned)
 		setSavedAt(Date.now())
 		onSave?.(cleaned)
 	}
@@ -213,7 +169,7 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 				>
 					{savedAt
 						? `Saved ${secondsSince(savedAt)}s ago`
-						: 'Stored in your browser only. Sent per-request to the orchestrator.'}
+						: 'Kept in memory for this tab only — never saved to disk. Re-paste after a reload.'}
 				</span>
 				<button
 					type="button"

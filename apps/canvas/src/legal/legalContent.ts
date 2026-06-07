@@ -71,10 +71,12 @@ You will not use the Service to:
 
 ## 5. Bring-your-own-key
 
-You provide your own credentials for Anthropic, E2B, and any
-MCP servers your agents connect to. Those credentials are stored
-in your browser's sessionStorage and sent to our orchestrator on
-each request via HTTP headers. We do not persist them.
+You provide your own credentials for Anthropic, OpenAI-compatible
+providers, E2B, and any MCP servers your agents connect to. Your
+model API keys are held in your browser's memory only — never
+written to disk or browser storage — and sent to our orchestrator
+on each request via HTTP headers. They are cleared when you reload
+or close the tab, and we do not persist them.
 
 If you supply a hosted-deployment environment variable instead
 (e.g. via Vercel project settings), that key lives in your
@@ -91,7 +93,7 @@ For each authenticated session we record:
 
 We do not record:
 
-- Your API keys (sessionStorage, never sent to our database)
+- Your API keys (held in browser memory only, never sent to our database)
 - The content of your prompts beyond what is in the audit log
 
 Data lives in Postgres (hosted via Neon) and is encrypted at
@@ -176,10 +178,10 @@ of the open-source code base.
 
 ## What we do NOT collect
 
-- **Your API keys.** Anthropic, E2B, and MCP-server credentials
-  live in your browser's sessionStorage. They are sent to our
-  orchestrator on each request via HTTP headers and are never
-  written to our database.
+- **Your API keys.** Anthropic, OpenAI-compatible, and E2B
+  credentials are held in your browser's memory only — never written
+  to disk or browser storage. They are sent to our orchestrator on
+  each request via HTTP headers and are never written to our database.
 - **Your prompts in clear text.** The audit log records that a
   tool was called and the safety classification, not the
   message content beyond what tool_input dictates.
@@ -232,8 +234,10 @@ of these. We respond within 30 days. Free of charge.
 
 The Service uses:
 
-- **sessionStorage** for your session JWT, room id, and BYOK
-  API keys. Lives until tab close. Not a cookie.
+- **sessionStorage** for your session JWT and room id. Lives until
+  tab close. Not a cookie.
+- **In-memory only** for your BYOK model API keys — never written to
+  any browser storage; cleared on reload or tab close.
 - **localStorage** for the onboarding-completed flag. Persists
   across tabs.
 
