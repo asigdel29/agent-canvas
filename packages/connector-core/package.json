@@ -26,7 +26,7 @@
     "@agent-canvas/orchestrator-types": "*"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }
