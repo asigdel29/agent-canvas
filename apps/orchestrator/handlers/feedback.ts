@@ -93,10 +93,10 @@ export default async function handler(req: Request): Promise<Response> {
 			} as never,
 		})
 	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err)
+		console.error('feedback audit write failed', err)
 		return withCorsHeaders(
 			req,
-			jsonError(500, 'audit_write_failed', msg.slice(0, 320))
+			jsonError(500, 'audit_write_failed', 'internal_error')
 		)
 	}
 
