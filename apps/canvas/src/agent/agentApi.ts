@@ -9,6 +9,7 @@
  */
 
 import type { NewAgentDraft } from './NewAgentModal.js'
+import { readApiKey } from '../settings/keyStore.js'
 
 export interface AgentApiRecord {
 	readonly id: string
@@ -16,7 +17,9 @@ export interface AgentApiRecord {
 	readonly owner_user_id: string
 	readonly name: string
 	readonly purpose: string
+	readonly provider: string
 	readonly model: string
+	readonly model_base_url: string | null
 	readonly system_prompt: string
 	readonly capabilities: NewAgentDraft['capabilities']
 	readonly created_at: string
@@ -64,7 +67,9 @@ export class AgentApi {
 				workspace_id: this.opts.workspaceId,
 				name: draft.name,
 				purpose: draft.purpose,
+				provider: draft.provider,
 				model: draft.model,
+				model_base_url: draft.model_base_url,
 				system_prompt: draft.system_prompt,
 				capabilities: draft.capabilities,
 			}),
@@ -148,22 +153,16 @@ export class AgentApi {
 			authorization: `Bearer ${this.opts.session}`,
 		}
 		// Bring-Your-Own-Key passthrough. The orchestrator's runs.ts
-		// reads these and uses them instead of its own env vars.
-		// sessionStorage is the source of truth (see SettingsDrawer).
-		const anthropic = readBYOK('agent-canvas:anthropic_api_key')
-		const e2b = readBYOK('agent-canvas:e2b_api_key')
+		// reads these and uses them instead of its own env vars. The
+		// in-memory key store is the source of truth (see
+		// settings/keyStore); nothing is read from Web Storage.
+		const anthropic = readApiKey('anthropic')
+		const openai = readApiKey('openai')
+		const e2b = readApiKey('e2b')
 		if (anthropic) out['x-anthropic-api-key'] = anthropic
+		if (openai) out['x-openai-api-key'] = openai
 		if (e2b) out['x-e2b-api-key'] = e2b
 		return out
-	}
-}
-
-function readBYOK(key: string): string {
-	if (typeof window === 'undefined') return ''
-	try {
-		return (window.sessionStorage.getItem(key) ?? '').trim()
-	} catch {
-		return ''
 	}
 }
 

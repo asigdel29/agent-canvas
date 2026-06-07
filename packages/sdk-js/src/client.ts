@@ -63,6 +63,22 @@ export interface RateLimitMeta {
 	readonly retry_after_sec: number | null
 }
 
+/**
+ * Remove any trailing `/` characters from a string.
+ *
+ * Done with a backward scan rather than a `/\/+$/` regex: that pattern
+ * backtracks on a long run of slashes and is a polynomial-ReDoS hazard
+ * on caller-supplied input. The linear scan has no such failure mode.
+ *
+ * @param value the string to trim.
+ * @return `value` without trailing slashes.
+ */
+function stripTrailingSlashes(value: string): string {
+	let end = value.length
+	while (end > 0 && value.charCodeAt(end - 1) === 47 /* '/' */) end -= 1
+	return value.slice(0, end)
+}
+
 export class AgentCanvasClient {
 	private readonly base: string
 	private readonly token: string
@@ -70,7 +86,7 @@ export class AgentCanvasClient {
 	private readonly timeoutMs: number
 
 	constructor(opts: AgentCanvasClientOptions) {
-		this.base = opts.base_url.replace(/\/+$/, '')
+		this.base = stripTrailingSlashes(opts.base_url)
 		this.token = opts.token
 		this.fetchImpl = opts.fetchImpl ?? globalThis.fetch
 		this.timeoutMs = opts.timeout_ms ?? 30_000

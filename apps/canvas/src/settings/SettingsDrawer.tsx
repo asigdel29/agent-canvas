@@ -10,19 +10,20 @@
  *
  * What it manages:
  *
- *   ANTHROPIC_API_KEY  required for any agent to run. Stored in
- *                      sessionStorage on the canvas; sent on each
- *                      request via x-anthropic-api-key header.
- *                      Orchestrator prefers the header over its env.
+ *   ANTHROPIC_API_KEY  required for any agent to run. Held in memory on
+ *                      the canvas; sent on each request via the
+ *                      x-anthropic-api-key header. The orchestrator
+ *                      prefers the header over its env.
  *
  *   E2B_API_KEY        optional, needed only for computer-use.
  *                      Same BYOK flow.
  *
- * Why sessionStorage and not localStorage:
- *   - Keys vanish on tab close, matching most BYOK products
- *   - No write to disk after the tab dies; lower blast radius
- *   - User can always re-paste if they reopen the tab
- *   - Sign-out can clear it trivially
+ * Why in-memory only (see keyStore.ts):
+ *   - Nothing sensitive is written to disk or Web Storage, so a stolen
+ *     profile or an XSS read of storage yields no keys (lowest blast
+ *     radius).
+ *   - Keys vanish on reload or tab close; the user re-pastes them. That
+ *     is the deliberate trade-off for not persisting a credential.
  *
  * Why not server-side per-user storage:
  *   - Requires a user_secrets table + encryption + access control
@@ -36,50 +37,11 @@
  */
 
 import { useState } from 'react'
+import { readApiKeys, writeApiKeys, type SettingsValues } from './keyStore.js'
 import { TokensSection } from './TokensSection.js'
 import { WebhooksSection } from './WebhooksSection.js'
 
-export const SETTINGS_STORAGE = {
-	anthropicKey: 'agent-canvas:anthropic_api_key',
-	e2bKey: 'agent-canvas:e2b_api_key',
-} as const
-
-export interface SettingsValues {
-	anthropic_api_key: string
-	e2b_api_key: string
-}
-
-/** Read both keys from sessionStorage; returns empty strings for unset. */
-export function readSettings(): SettingsValues {
-	if (typeof window === 'undefined') return { anthropic_api_key: '', e2b_api_key: '' }
-	try {
-		return {
-			anthropic_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.anthropicKey) ?? '',
-			e2b_api_key: window.sessionStorage.getItem(SETTINGS_STORAGE.e2bKey) ?? '',
-		}
-	} catch {
-		return { anthropic_api_key: '', e2b_api_key: '' }
-	}
-}
-
-/** Write both keys to sessionStorage. Empty string clears. */
-export function writeSettings(values: SettingsValues): void {
-	if (typeof window === 'undefined') return
-	try {
-		if (values.anthropic_api_key) {
-			window.sessionStorage.setItem(SETTINGS_STORAGE.anthropicKey, values.anthropic_api_key)
-		} else {
-			window.sessionStorage.removeItem(SETTINGS_STORAGE.anthropicKey)
-		}
-		if (values.e2b_api_key) {
-			window.sessionStorage.setItem(SETTINGS_STORAGE.e2bKey, values.e2b_api_key)
-		} else {
-			window.sessionStorage.removeItem(SETTINGS_STORAGE.e2bKey)
-		}
-	} catch {
-		// sessionStorage disabled (private mode / sandboxed iframe) — silent fail
-	}
-}
+export type { SettingsValues } from './keyStore.js'
 
 export interface SettingsDrawerProps {
 	readonly onClose: () => void
@@ -101,20 +63,22 @@ export interface SettingsDrawerProps {
 }
 
 export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: SettingsDrawerProps) {
-	const [values, setValues] = useState<SettingsValues>(() => readSettings())
+	const [values, setValues] = useState<SettingsValues>(() => readApiKeys())
 	const [savedAt, setSavedAt] = useState<number | null>(null)
 
 	function save() {
 		const cleaned: SettingsValues = {
 			anthropic_api_key: values.anthropic_api_key.trim(),
+			openai_api_key: values.openai_api_key.trim(),
 			e2b_api_key: values.e2b_api_key.trim(),
 		}
-		writeSettings(cleaned)
+		writeApiKeys(cleaned)
 		setSavedAt(Date.now())
 		onSave?.(cleaned)
 	}
 
 	const anthropicShape = isAnthropicShape(values.anthropic_api_key)
+	const openaiShape = isOpenAiShape(values.openai_api_key)
 	const e2bShape = isE2BShape(values.e2b_api_key)
 
 	return (
@@ -171,6 +135,16 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 			/>
 
 			<KeyField
+				label="OpenAI-compatible API key"
+				placeholder="sk-..."
+				required={false}
+				hint="Optional. Used by agents on the OpenAI-compatible provider (OpenAI, Gemini, Groq, OpenRouter, local). Set the endpoint per-agent in the New agent dialog."
+				value={values.openai_api_key}
+				shapeOk={openaiShape}
+				onChange={(v) => setValues((prev) => ({ ...prev, openai_api_key: v }))}
+			/>
+
+			<KeyField
 				label="E2B API key"
 				placeholder="e2b_..."
 				required={false}
@@ -195,7 +169,7 @@ export function SettingsDrawer({ onClose, onSave, orchestratorUrl, session }: Se
 				>
 					{savedAt
 						? `Saved ${secondsSince(savedAt)}s ago`
-						: 'Stored in your browser only. Sent per-request to the orchestrator.'}
+						: 'Kept in memory for this tab only — never saved to disk. Re-paste after a reload.'}
 				</span>
 				<button
 					type="button"
@@ -305,6 +279,15 @@ function isAnthropicShape(v: string): 'ok' | 'wrong-shape' | 'empty' {
 	const t = v.trim()
 	if (t.length === 0) return 'empty'
 	return t.startsWith('sk-ant-') && t.length > 16 ? 'ok' : 'wrong-shape'
+}
+
+/**
+ * OpenAI-compatible keys vary widely by provider (OpenAI `sk-…`, Gemini,
+ * Groq `gsk_…`, OpenRouter `sk-or-…`, local servers with no prefix), so
+ * the only soft check is non-empty. Validity is confirmed on first run.
+ */
+function isOpenAiShape(v: string): 'ok' | 'wrong-shape' | 'empty' {
+	return v.trim().length === 0 ? 'empty' : 'ok'
 }
 
 function isE2BShape(v: string): 'ok' | 'wrong-shape' | 'empty' {

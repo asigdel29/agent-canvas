@@ -30,6 +30,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 
 import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
+import { logger } from '../../dist/observability/logger.js'
 
 export default async function handler(req: Request): Promise<Response> {
 	const preflight = preflightResponse(req)
@@ -109,7 +110,11 @@ export default async function handler(req: Request): Promise<Response> {
 				jsonError(504, 'probe_timeout', `no response from ${url.host} within 5s`)
 			)
 		}
-		return withCorsHeaders(req, jsonError(502, 'probe_failed', msg.slice(0, 320)))
+		// Log the underlying reason server-side; return a generic message so
+		// the upstream error text (which can carry internal detail) never
+		// reaches the client.
+		logger.error('mcp_probe_failed', { err })
+		return withCorsHeaders(req, jsonError(502, 'probe_failed', 'could not reach the MCP server'))
 	}
 }
 

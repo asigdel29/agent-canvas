@@ -27,6 +27,17 @@ import {
 } from './capabilities.js'
 import { ORCHESTRATOR_URL } from '../config.js'
 
+/**
+ * The model family an agent runs on.
+ *
+ *   'anthropic'   native Claude models on the Anthropic API.
+ *   'openai'      any OpenAI-compatible `/chat/completions` endpoint,
+ *                 chosen by a base URL (OpenAI, Gemini, Groq, OpenRouter,
+ *                 a local server, ...).
+ */
+export type Provider = 'anthropic' | 'openai'
+
+/** Anthropic preset model ids the modal offers as radios. */
 export type ModelId =
 	| 'claude-opus-4-7'
 	| 'claude-sonnet-4-6'
@@ -50,10 +61,52 @@ const MODELS: { id: ModelId; label: string; sub: string }[] = [
 	},
 ]
 
+const DEFAULT_ANTHROPIC_MODEL: ModelId = 'claude-sonnet-4-6'
+
+/**
+ * Presets for the OpenAI-compatible provider. Each fills a base URL and a
+ * sensible default model id; "Custom" leaves both blank so any endpoint
+ * can be entered. The API key is supplied separately in Settings.
+ */
+interface OpenAiPreset {
+	readonly id: string
+	readonly label: string
+	readonly base_url: string
+	readonly model: string
+}
+
+const OPENAI_PRESETS: readonly OpenAiPreset[] = [
+	{ id: 'openai', label: 'OpenAI', base_url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+	{
+		id: 'gemini',
+		label: 'Google Gemini',
+		base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+		model: 'gemini-2.0-flash',
+	},
+	{
+		id: 'groq',
+		label: 'Groq',
+		base_url: 'https://api.groq.com/openai/v1',
+		model: 'llama-3.3-70b-versatile',
+	},
+	{
+		id: 'openrouter',
+		label: 'OpenRouter',
+		base_url: 'https://openrouter.ai/api/v1',
+		model: 'openai/gpt-4o',
+	},
+	{ id: 'custom', label: 'Custom (any OpenAI-compatible URL)', base_url: '', model: '' },
+]
+
 export interface NewAgentDraft {
 	readonly name: string
 	readonly purpose: string
-	readonly model: ModelId
+	/** Which model family the agent runs on. */
+	readonly provider: Provider
+	/** Provider-specific model id (a Claude id, or an OpenAI-style id). */
+	readonly model: string
+	/** OpenAI-compatible API root; null for the Anthropic provider. */
+	readonly model_base_url: string | null
 	readonly system_prompt: string
 	readonly capabilities: AgentCapabilities
 }
@@ -91,9 +144,47 @@ export function NewAgentModal({
 	const isEditing = Boolean(editingAgentId)
 	const [name, setName] = useState('')
 	const [purpose, setPurpose] = useState('')
-	const [model, setModel] = useState<ModelId>('claude-sonnet-4-6')
+	const [provider, setProvider] = useState<Provider>('anthropic')
+	const [model, setModel] = useState<string>(DEFAULT_ANTHROPIC_MODEL)
+	const [baseUrl, setBaseUrl] = useState<string>('')
 	const [systemPrompt, setSystemPrompt] = useState('')
 	const [capabilities, setCapabilities] = useState<AgentCapabilities>(defaultCapabilities())
+
+	// Switch model family. Each provider resets to its own sensible
+	// default so the form never carries an Anthropic model id into the
+	// OpenAI fields or vice versa.
+	function changeProvider(next: Provider) {
+		setProvider(next)
+		if (next === 'anthropic') {
+			setModel(DEFAULT_ANTHROPIC_MODEL)
+			setBaseUrl('')
+		} else {
+			const first = OPENAI_PRESETS[0]!
+			setBaseUrl(first.base_url)
+			setModel(first.model)
+		}
+	}
+
+	// Apply an OpenAI preset: named presets fill the base URL + model;
+	// "Custom" leaves the fields for the user to edit directly.
+	function applyPreset(id: string) {
+		const preset = OPENAI_PRESETS.find((p) => p.id === id)
+		if (!preset || preset.id === 'custom') return
+		setBaseUrl(preset.base_url)
+		setModel(preset.model)
+	}
+
+	// The select reflects the current base URL; an unmatched URL reads as
+	// "Custom" so a hand-edited endpoint stays selectable.
+	const selectedPreset =
+		OPENAI_PRESETS.find((p) => p.id !== 'custom' && p.base_url === baseUrl)?.id ?? 'custom'
+
+	// Create requires a name and a model; the OpenAI provider also needs
+	// a base URL. The backend re-validates and SSRF-checks the URL.
+	const canSubmit =
+		name.trim().length > 0 &&
+		model.trim().length > 0 &&
+		(provider === 'anthropic' || baseUrl.trim().length > 0)
 
 	const dialogRef = useRef<HTMLDivElement | null>(null)
 
@@ -105,13 +196,17 @@ export function NewAgentModal({
 		if (open) {
 			setName(initialDraft?.name ?? '')
 			setPurpose(initialDraft?.purpose ?? '')
-			setModel((initialDraft?.model as ModelId) ?? 'claude-sonnet-4-6')
+			setProvider(initialDraft?.provider ?? 'anthropic')
+			setModel(initialDraft?.model ?? DEFAULT_ANTHROPIC_MODEL)
+			setBaseUrl(initialDraft?.model_base_url ?? '')
 			setSystemPrompt(initialDraft?.system_prompt ?? '')
 			setCapabilities(initialDraft?.capabilities ?? defaultCapabilities())
 		} else {
 			setName('')
 			setPurpose('')
-			setModel('claude-sonnet-4-6')
+			setProvider('anthropic')
+			setModel(DEFAULT_ANTHROPIC_MODEL)
+			setBaseUrl('')
 			setSystemPrompt('')
 			setCapabilities(defaultCapabilities())
 		}
@@ -133,14 +228,16 @@ export function NewAgentModal({
 		window.addEventListener('keydown', onKey)
 		return () => window.removeEventListener('keydown', onKey)
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [open, name, purpose, model, systemPrompt, capabilities])
+	}, [open, name, purpose, provider, model, baseUrl, systemPrompt, capabilities])
 
 	function submit() {
-		if (!name.trim()) return
+		if (!canSubmit) return
 		const draft: NewAgentDraft = {
 			name: name.trim(),
 			purpose: purpose.trim(),
-			model,
+			provider,
+			model: model.trim(),
+			model_base_url: provider === 'openai' ? baseUrl.trim() || null : null,
 			system_prompt: systemPrompt.trim(),
 			capabilities,
 		}
@@ -251,20 +348,85 @@ export function NewAgentModal({
 						/>
 					</Field>
 
-					<Field label="Model">
-						<div style={{ display: 'grid', gap: 'var(--space-1)' }}>
-							{MODELS.map((m) => (
-								<ModelRadio
-									key={m.id}
-									id={m.id}
-									label={m.label}
-									sub={m.sub}
-									checked={model === m.id}
-									onChange={() => setModel(m.id)}
-								/>
-							))}
+					<Field label="Provider">
+						<div
+							style={{
+								display: 'grid',
+								gridTemplateColumns: '1fr 1fr',
+								gap: 'var(--space-2)',
+							}}
+						>
+							<ProviderTab
+								label="Anthropic"
+								sub="Claude models"
+								checked={provider === 'anthropic'}
+								onClick={() => changeProvider('anthropic')}
+							/>
+							<ProviderTab
+								label="OpenAI-compatible"
+								sub="OpenAI · Gemini · Groq · local"
+								checked={provider === 'openai'}
+								onClick={() => changeProvider('openai')}
+							/>
 						</div>
 					</Field>
+
+					{provider === 'anthropic' ? (
+						<Field label="Model">
+							<div style={{ display: 'grid', gap: 'var(--space-1)' }}>
+								{MODELS.map((m) => (
+									<ModelRadio
+										key={m.id}
+										id={m.id}
+										label={m.label}
+										sub={m.sub}
+										checked={model === m.id}
+										onChange={() => setModel(m.id)}
+									/>
+								))}
+							</div>
+						</Field>
+					) : (
+						<>
+							<Field
+								label="Preset"
+								hint="Pick a provider, or Custom for any OpenAI-compatible endpoint."
+							>
+								<select
+									value={selectedPreset}
+									onChange={(e) => applyPreset(e.target.value)}
+									style={{ ...inputStyle, cursor: 'pointer' }}
+								>
+									{OPENAI_PRESETS.map((p) => (
+										<option key={p.id} value={p.id}>
+											{p.label}
+										</option>
+									))}
+								</select>
+							</Field>
+							<Field
+								label="Base URL"
+								hint="API root. The orchestrator appends /chat/completions and sends your key from Settings."
+							>
+								<input
+									type="url"
+									value={baseUrl}
+									onChange={(e) => setBaseUrl(e.target.value)}
+									placeholder="https://api.openai.com/v1"
+									style={inputStyle}
+								/>
+							</Field>
+							<Field label="Model" hint="The model id this endpoint exposes.">
+								<input
+									type="text"
+									value={model}
+									onChange={(e) => setModel(e.target.value)}
+									placeholder="gpt-4o"
+									style={inputStyle}
+								/>
+							</Field>
+						</>
+					)}
 
 					<Field label="System prompt" hint="What the agent should always remember.">
 						<textarea
@@ -314,19 +476,19 @@ export function NewAgentModal({
 							</button>
 							<button
 								type="submit"
-								disabled={!name.trim()}
+								disabled={!canSubmit}
 								style={{
 									height: 32,
 									padding: '0 var(--space-4)',
-									background: name.trim() ? 'var(--accent)' : 'var(--surface-sunk)',
-									color: name.trim() ? 'var(--text-on-accent)' : 'var(--text-muted)',
+									background: canSubmit ? 'var(--accent)' : 'var(--surface-sunk)',
+									color: canSubmit ? 'var(--text-on-accent)' : 'var(--text-muted)',
 									border: 'none',
 									borderRadius: 'var(--radius-md)',
 									font: 'inherit',
 									fontFamily: 'var(--font-ui)',
 									fontSize: 'var(--font-13)',
 									fontWeight: 500,
-									cursor: name.trim() ? 'pointer' : 'not-allowed',
+									cursor: canSubmit ? 'pointer' : 'not-allowed',
 								}}
 							>
 								{isEditing ? 'Save changes' : 'Create agent'}
@@ -367,6 +529,47 @@ function Field({
 			{hint && <span style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{hint}</span>}
 			{children}
 		</label>
+	)
+}
+
+/**
+ * A two-state segmented control cell used to pick the model provider.
+ * Rendered as a button so the whole tile is the hit target.
+ */
+function ProviderTab({
+	label,
+	sub,
+	checked,
+	onClick,
+}: {
+	label: string
+	sub: string
+	checked: boolean
+	onClick: () => void
+}) {
+	return (
+		<button
+			type="button"
+			role="radio"
+			aria-checked={checked}
+			onClick={onClick}
+			style={{
+				display: 'grid',
+				gap: 2,
+				textAlign: 'left',
+				padding: 'var(--space-2) var(--space-3)',
+				background: checked ? 'var(--accent-soft)' : 'var(--surface-sunk)',
+				border: `1px solid ${checked ? 'var(--accent)' : 'var(--border)'}`,
+				borderRadius: 'var(--radius-md)',
+				cursor: 'pointer',
+				font: 'inherit',
+				fontFamily: 'var(--font-ui)',
+				color: 'var(--text-strong)',
+			}}
+		>
+			<span style={{ fontSize: 'var(--font-13)', fontWeight: 500 }}>{label}</span>
+			<span style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{sub}</span>
+		</button>
 	)
 }
 

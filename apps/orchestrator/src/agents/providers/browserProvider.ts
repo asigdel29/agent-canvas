@@ -14,11 +14,14 @@
  *     starts on the first browser-tool call and lives until
  *     teardown.
  *
- *   - Per-agent storageState: when capabilities.browser_use
- *     .persist_cookies is true, the session is loaded from + saved
- *     to a per-agent file under /tmp/agent-canvas-browser/<agent_id>.
- *     Off by default so a hostile site cannot pin state across
- *     unrelated tasks.
+ *   - Session storageState: when capabilities.browser_use
+ *     .persist_cookies is true, cookies are loaded from + saved to a
+ *     file inside a per-session private temp directory created with
+ *     mkdtemp (unpredictable name, 0700 dir, 0600 file). State scopes
+ *     to the session rather than a fixed, shared path, which avoids the
+ *     predictable-temp-file / symlink race a `/tmp/<fixed>/<agent_id>`
+ *     location would expose. Off by default so a hostile site cannot
+ *     pin state across unrelated tasks.
  *
  *   - Tool safety: every browser tool is marked 'safe'. Approval-
  *     on-every-click is unworkable. If a workflow needs explicit
@@ -49,7 +52,8 @@
  * @author asigdel29
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdtempSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -65,7 +69,6 @@ import type {
 const DEFAULT_TIMEOUT_MS = 15_000
 const DEFAULT_MAX_TEXT_CHARS = 8_000
 const DEFAULT_MAX_LINKS = 50
-const STORAGE_DIR = join(tmpdir(), 'agent-canvas-browser')
 
 export interface BrowserProviderOptions {
 	readonly config: BrowserUseConfig
@@ -119,8 +122,12 @@ export class BrowserSession {
 
 	constructor(opts: BrowserProviderOptions) {
 		this.opts = opts
+		// Persisted cookies live inside a per-session private temp directory.
+		// mkdtemp yields an unpredictable path created with 0700 perms; the
+		// file is written 0600. This avoids the symlink / predictable-path
+		// race that a fixed shared temp location would expose.
 		this.storagePath = opts.config.persist_cookies
-			? join(STORAGE_DIR, `${opts.agent_id}.json`)
+			? join(mkdtempSync(join(tmpdir(), 'agent-canvas-browser-')), `${opts.agent_id}.json`)
 			: null
 	}
 
@@ -173,9 +180,10 @@ export class BrowserSession {
 
 	private async saveStorageState(): Promise<void> {
 		if (!this.storagePath || !this.context) return
-		await mkdir(STORAGE_DIR, { recursive: true })
+		// The directory already exists (created 0700 by mkdtemp in the
+		// constructor); restrict the file itself to owner read/write.
 		const state = await this.context.storageState()
-		await writeFile(this.storagePath, JSON.stringify(state), 'utf8')
+		await writeFile(this.storagePath, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 })
 	}
 }
 

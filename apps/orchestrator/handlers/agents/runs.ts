@@ -26,7 +26,11 @@ import { extractSession } from '../../dist/auth/session.js'
 import { preflightResponse, withCorsHeaders } from '../../dist/http/cors.js'
 import { withRateLimit } from '../../dist/rateLimit/withRateLimit.js'
 import type { AgentId } from '../../dist/agents/agentRecord.js'
-import { AnthropicClient } from '../../dist/agents/anthropicClient.js'
+import type { ModelClient } from '../../dist/agents/modelClient.js'
+import {
+	createModelClient,
+	ModelClientConfigError,
+} from '../../dist/agents/modelClientFactory.js'
 import { buildBrowserContribution } from '../../dist/agents/providers/browserProvider.js'
 import { buildComputerUseContribution } from '../../dist/agents/providers/computerUseProvider.js'
 import {
@@ -74,27 +78,6 @@ export default async function handler(req: Request): Promise<Response> {
 	// agentStore / approvalGate / bus survives into the closure.
 	const startRun = async (): Promise<Response> => {
 
-	// Resolve the Anthropic key. Per-request header takes precedence
-	// (Bring-Your-Own-Key path from the canvas Settings drawer); fall
-	// back to ANTHROPIC_API_KEY env if the header is absent (still
-	// useful for ops-controlled deployments). Without either, we 503
-	// with a remediation message the canvas's ErrorToast translates.
-	const anthropicKey =
-		req.headers.get('x-anthropic-api-key')?.trim() ||
-		process.env['ANTHROPIC_API_KEY'] ||
-		null
-	if (!anthropicKey) {
-		return withCorsHeaders(
-			req,
-			jsonError(
-				503,
-				'anthropic_not_configured',
-				'Set your Claude API key in Settings, or set ANTHROPIC_API_KEY on the orchestrator.'
-			)
-		)
-	}
-	const anthropic = new AnthropicClient({ apiKey: anthropicKey })
-
 	let body: { agent_id?: string; room_id?: string; initial_message?: string }
 	try {
 		body = (await req.json()) as typeof body
@@ -131,6 +114,47 @@ export default async function handler(req: Request): Promise<Response> {
 		const name = err instanceof Error ? err.name : ''
 		if (name === 'TenancyForbiddenError') {
 			return withCorsHeaders(req, jsonError(403, 'workspace_forbidden'))
+		}
+		throw err
+	}
+
+	// Resolve the model client. The provider lives on the agent; the
+	// API key is Bring-Your-Own-Key first (per-request header from the
+	// canvas Settings drawer), falling back to a provider-specific env
+	// var for ops-controlled deployments. Without a key we 503 with a
+	// remediation message the canvas's ErrorToast translates.
+	const provider = agent.provider
+	const apiKey =
+		provider === 'openai'
+			? req.headers.get('x-openai-api-key')?.trim() ||
+				process.env['OPENAI_API_KEY'] ||
+				null
+			: req.headers.get('x-anthropic-api-key')?.trim() ||
+				process.env['ANTHROPIC_API_KEY'] ||
+				null
+	if (!apiKey) {
+		// Keep the legacy code for the Anthropic case so the existing
+		// ErrorToast remediation still matches; use the generalized code
+		// for every other provider.
+		const code =
+			provider === 'anthropic' ? 'anthropic_not_configured' : 'model_provider_not_configured'
+		const detail =
+			provider === 'openai'
+				? 'Set your OpenAI-compatible API key in Settings, or set OPENAI_API_KEY on the orchestrator.'
+				: 'Set your Claude API key in Settings, or set ANTHROPIC_API_KEY on the orchestrator.'
+		return withCorsHeaders(req, jsonError(503, code, detail))
+	}
+	let modelClient: ModelClient
+	try {
+		modelClient = createModelClient({
+			provider,
+			apiKey,
+			baseUrl: agent.model_base_url,
+		})
+	} catch (err) {
+		// A bad base URL (missing or SSRF-rejected) is the caller's fault.
+		if (err instanceof ModelClientConfigError) {
+			return withCorsHeaders(req, jsonError(400, err.code, err.message))
 		}
 		throw err
 	}
@@ -233,7 +257,7 @@ export default async function handler(req: Request): Promise<Response> {
 					agent,
 					initial_user_message: body.initial_message!,
 				},
-				{ anthropic, catalog, sink, approvalGate }
+				{ model: modelClient, catalog, sink, approvalGate }
 			)
 		} catch (err) {
 			// runLoop should never throw (catches its own errors and

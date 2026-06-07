@@ -63,21 +63,38 @@ Open the server URL, choose an auth mode, paste your Claude key in Settings, and
 Set `AUTH_MODE` in `./.env`:
 
 - `open` — teammates join with just a display name. No GitHub app, no external login. Open mode drops per-workspace isolation, so run it behind a trusted network boundary.
-- `github` (default) — set `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` from a [GitHub OAuth app](https://github.com/settings/developers) (callback `<origin>/api/auth/github/callback`).
+- `github` (default) — create a [GitHub OAuth app](https://github.com/settings/developers), then set `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`, plus `CANVAS_ORIGIN` and `PUBLIC_ORCHESTRATOR_ORIGIN`. The app's **Authorization callback URL** must equal `${PUBLIC_ORCHESTRATOR_ORIGIN}/api/auth/github/callback`. For local dev that is `http://localhost:3000/api/auth/github/callback`, with Homepage URL `http://localhost:5173`.
 
 ### AI keys
 
-There is no AI-provider login. Each user pastes their own Claude key in Settings; it stays in their browser and travels per-request. Optionally set `ANTHROPIC_API_KEY` as a shared server-side fallback. Computer-use needs an `E2B_API_KEY` (also pasteable per user).
+There is no AI-provider login — each user brings their own key in Settings; it stays in their browser and travels per-request. Two providers are supported per agent (chosen in the New agent dialog):
+
+- **Anthropic** — native Claude models. Paste a Claude key in Settings, or set `ANTHROPIC_API_KEY` as a shared server-side fallback.
+- **OpenAI-compatible** — any `/chat/completions` endpoint, selected by a base URL: OpenAI, Gemini's OpenAI surface, Groq, OpenRouter, Together, or a local server (LM Studio, Ollama). Paste an OpenAI-compatible key in Settings, or set `OPENAI_API_KEY` as the fallback. The orchestrator SSRF-checks the base URL; to allow a local `http://127.0.0.1` server set `MODEL_BASE_URL_ALLOW_HTTP=true` and `MODEL_BASE_URL_ALLOW_PRIVATE=true` (dev only).
+
+Computer-use needs an `E2B_API_KEY` (also pasteable per user) and is available on the Anthropic provider only.
 
 ## Deploy
 
-One Railway service plus a Postgres plugin (config in [`railway.json`](railway.json)):
+### Single service (simplest)
+
+One Railway service plus a Postgres plugin (config in [`railway.json`](railway.json)) serves both the API and the built canvas from one origin — no CORS:
 
 1. Create a Railway project from this repo and add the **Postgres** plugin.
 2. In the service **Variables**, set `DATABASE_URL=${{Postgres.DATABASE_URL}}`, the four secrets (`JWT_SECRET`, `SSE_TOKEN_SECRET`, `AUTH_STATE_SECRET`, `VAULT_KEY` — `openssl rand -hex 32` each), and `AUTH_MODE`.
 3. Deploy. Railway builds, runs migrations, starts the server, and health-checks `/api/health`.
 
 A CI workflow can also deploy on push to `main` — set the repo variable `RAILWAY_DEPLOY=true` and the secret `RAILWAY_TOKEN` (see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
+
+### Split: canvas on Vercel + orchestrator on Railway (lowest cost)
+
+Serve the static canvas from Vercel's CDN (free, immutable-cached) and run the orchestrator on Railway. Two origins, so CORS is configured explicitly.
+
+1. **Railway (orchestrator + Postgres)** — as above, but also set `PUBLIC_ORCHESTRATOR_ORIGIN` to the Railway URL, and `CANVAS_ORIGIN` + `ALLOWED_ORIGINS` to the Vercel canvas URL.
+2. **Vercel (canvas)** — import the repo; it uses [`vercel.json`](vercel.json) to build only `apps/canvas`. Set the **Production** env var `VITE_ORCHESTRATOR_URL` to the Railway URL (Vite inlines it at build; see [`apps/canvas/src/config.ts`](apps/canvas/src/config.ts)).
+3. **GitHub OAuth app** — Homepage = the Vercel URL; Authorization callback = `<railway-url>/api/auth/github/callback`.
+
+Because the two URLs reference each other, deploy Railway first, then Vercel with `VITE_ORCHESTRATOR_URL`, then set Railway's `CANVAS_ORIGIN`/`ALLOWED_ORIGINS` to the Vercel URL and restart.
 
 ## Configuration
 

@@ -36,6 +36,7 @@ import {
 	nodeRequestToWebRequest,
 	writeWebResponseToNode,
 } from './httpBridge.js'
+import { logger } from '../dist/observability/logger.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url)) // apps/orchestrator/scripts
 const ORCH_ROOT = resolve(HERE, '..') // apps/orchestrator
@@ -162,10 +163,12 @@ const server = createServer(async (rawReq: IncomingMessage, rawRes: ServerRespon
 			const webRes = await handler(webReq)
 			await writeWebResponseToNode(webRes, rawRes)
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err)
+			// Log the real error server-side; never return its message (which
+			// can carry a stack or internal detail) to the client.
+			logger.error('handler_threw', { err })
 			rawRes.statusCode = 500
 			rawRes.setHeader('content-type', 'application/json')
-			rawRes.end(JSON.stringify({ error: 'handler_threw', detail: msg }))
+			rawRes.end(JSON.stringify({ error: 'internal_error' }))
 		}
 		return
 	}

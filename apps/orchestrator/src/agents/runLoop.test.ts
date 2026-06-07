@@ -104,7 +104,9 @@ const AGENT: AgentRecord = {
 	owner_user_id: 'u_test' as never,
 	name: 'Test',
 	purpose: '',
+	provider: 'anthropic',
 	model: 'claude-sonnet-4-6',
+	model_base_url: null,
 	system_prompt: 'You are a test agent.',
 	capabilities: {
 		computer_use: { enabled: false, provider: 'none' },
@@ -162,7 +164,7 @@ describe('runLoop', () => {
 		const { client, calls } = fakeAnthropic([endTurn('all done')])
 		const { sink, events } = collectingSink()
 		const summary = await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([bundle([])]),
 			sink,
 			approvalGate: new AutoApprove(),
@@ -191,7 +193,7 @@ describe('runLoop', () => {
 		])
 		const { sink, events } = collectingSink()
 		const summary = await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([bundle([search])]),
 			sink,
 			approvalGate: new AutoApprove(),
@@ -226,7 +228,7 @@ describe('runLoop', () => {
 		])
 		const { sink, events } = collectingSink()
 		const summary = await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([bundle([destroy])]),
 			sink,
 			approvalGate: new AutoReject(),
@@ -252,7 +254,7 @@ describe('runLoop', () => {
 		])
 		const { sink, events } = collectingSink()
 		await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([bundle([destroy])]),
 			sink,
 			approvalGate: new AutoApprove(),
@@ -271,7 +273,7 @@ describe('runLoop', () => {
 		)
 		const { client } = fakeAnthropic(script)
 		const summary = await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([bundle([safeNoOp])]),
 			sink: collectingSink().sink,
 			approvalGate: new AutoApprove(),
@@ -292,7 +294,7 @@ describe('runLoop', () => {
 			return { ok: true, content: 'done' }
 		})
 		const summary = await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([bundle([noop])]),
 			sink: collectingSink().sink,
 			approvalGate: new AutoApprove(),
@@ -309,7 +311,7 @@ describe('runLoop', () => {
 		])
 		const { sink, events } = collectingSink()
 		const summary = await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([bundle([])]),
 			sink,
 			approvalGate: new AutoApprove(),
@@ -332,7 +334,7 @@ describe('runLoop', () => {
 			},
 		} as unknown as AnthropicClient
 		const summary = await runLoop(makeInput(), {
-			anthropic: client,
+			model: client,
 			catalog: composeToolCatalog([broken]),
 			sink: collectingSink().sink,
 			approvalGate: new AutoApprove(),

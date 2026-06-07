@@ -36,7 +36,9 @@ export const STARTERS: readonly Starter[] = [
 		draft: {
 			name: 'web-research',
 			purpose: 'Search the web and summarize',
+			provider: 'anthropic',
 			model: 'claude-sonnet-4-6',
+			model_base_url: null,
 			system_prompt:
 				'You research questions on the open web using the browser tools. ' +
 				'Prefer authoritative sources. When you cite a fact, include the URL ' +
@@ -56,7 +58,9 @@ export const STARTERS: readonly Starter[] = [
 		draft: {
 			name: 'desktop-operator',
 			purpose: 'Operate a sandboxed Linux desktop',
+			provider: 'anthropic',
 			model: 'claude-sonnet-4-6',
+			model_base_url: null,
 			system_prompt:
 				'You operate a sandboxed Linux desktop via the computer tool. ' +
 				'Take a screenshot first, then plan one step at a time. After each ' +
@@ -76,7 +80,9 @@ export const STARTERS: readonly Starter[] = [
 		draft: {
 			name: 'mcp-agent',
 			purpose: 'Use my MCP server to do work',
+			provider: 'anthropic',
 			model: 'claude-sonnet-4-6',
+			model_base_url: null,
 			system_prompt:
 				'You use the tools exposed by the configured MCP servers. ' +
 				'Read each tool description before calling it. When a tool fails, ' +
