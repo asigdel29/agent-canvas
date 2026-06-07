@@ -49,6 +49,7 @@
  * @author asigdel29
  */
 
+import { mkdtempSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -65,7 +66,6 @@ import type {
 const DEFAULT_TIMEOUT_MS = 15_000
 const DEFAULT_MAX_TEXT_CHARS = 8_000
 const DEFAULT_MAX_LINKS = 50
-const STORAGE_DIR = join(tmpdir(), 'agent-canvas-browser')
 
 export interface BrowserProviderOptions {
 	readonly config: BrowserUseConfig
@@ -115,12 +115,16 @@ export class BrowserSession {
 	private context: BrowserContext | null = null
 	private page: Page | null = null
 	private readonly opts: BrowserProviderOptions
+	private readonly storageDir: string
 	private storagePath: string | null
 
 	constructor(opts: BrowserProviderOptions) {
 		this.opts = opts
+		this.storageDir = opts.config.persist_cookies
+			? mkdtempSync(join(tmpdir(), 'agent-canvas-browser-'))
+			: ''
 		this.storagePath = opts.config.persist_cookies
-			? join(STORAGE_DIR, `${opts.agent_id}.json`)
+			? join(this.storageDir, `${opts.agent_id}.json`)
 			: null
 	}
 
@@ -173,9 +177,12 @@ export class BrowserSession {
 
 	private async saveStorageState(): Promise<void> {
 		if (!this.storagePath || !this.context) return
-		await mkdir(STORAGE_DIR, { recursive: true })
+		await mkdir(this.storageDir, { recursive: true, mode: 0o700 })
 		const state = await this.context.storageState()
-		await writeFile(this.storagePath, JSON.stringify(state), 'utf8')
+		await writeFile(this.storagePath, JSON.stringify(state), {
+			encoding: 'utf8',
+			mode: 0o600,
+		})
 	}
 }
 
