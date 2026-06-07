@@ -23,7 +23,7 @@ export interface SpendIndicatorProps {
  * just the number (e.g. the TopBar passing a plain string into a
  * generic pill slot).
  */
-export function formatSpend(accrued_micros: number, ceiling_micros: number): string {
+function formatSpend(accrued_micros: number, ceiling_micros: number): string {
 	return `${usd(accrued_micros)} / ${usd(ceiling_micros)}`
 }
 
@@ -99,6 +99,3 @@ function ProgressTrack({ fraction, accent }: { fraction: number; accent: string 
 function usd(micros: number): string {
 	return `$${(micros / 1_000_000).toFixed(2)}`
 }
-
-// Backwards compatibility — older imports of `SpendBanner` continue to work.
-export const SpendBanner = SpendIndicator

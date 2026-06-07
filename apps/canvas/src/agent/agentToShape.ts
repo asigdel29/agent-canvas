@@ -15,7 +15,11 @@
  * @author asigdel29
  */
 
-import type { AgentShapeProps } from '../canvas/agentShape.js'
+import {
+	DEFAULT_AGENT_HEIGHT,
+	DEFAULT_AGENT_WIDTH,
+	type AgentShapeProps,
+} from '../canvas/agentShape.js'
 import type { AgentApiRecord } from './agentApi.js'
 import {
 	type AgentCapabilities,
@@ -52,8 +56,8 @@ export function recordToShapeProps(
 		current_room_id: roomId,
 		last_event_seq: 0,
 		last_event_at: record.updated_at,
-		w: 320,
-		h: 140,
+		w: DEFAULT_AGENT_WIDTH,
+		h: DEFAULT_AGENT_HEIGHT,
 		render_mode: 'full',
 		cap_computer_use: caps.computer_use.enabled,
 		cap_browser_use: caps.browser_use.enabled,
