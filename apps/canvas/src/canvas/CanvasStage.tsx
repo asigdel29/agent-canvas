@@ -1,39 +1,42 @@
 /**
- * CanvasStage — the tldraw editor surface, isolated into its own module
- * so it can be code-split out of the initial bundle.
+ * CanvasStage — the lazily-loaded entry point for the canvas surface.
  *
- * tldraw and its stylesheet are the heaviest dependency in the canvas
- * (~2 MB). Most page loads start on the sign-in screen and never reach
- * the editor, so App lazy-imports this component behind a Suspense
- * boundary: the login/onboarding path ships almost none of tldraw, and
- * the editor chunk downloads only once a signed-in user lands on a
- * populated workspace.
- *
- * Everything tldraw-coupled lives here — the `Tldraw` component, the CSS,
- * and the custom `AgentShapeUtil` — so nothing in the eager graph imports
- * tldraw as a value.
+ * App imports this behind a Suspense boundary so the sign-in / onboarding
+ * path ships none of the canvas code. It is a thin forwarder to
+ * {@link InfiniteCanvas}, which owns all rendering and interaction.
  *
  * @author asigdel29
  */
 
-import { Tldraw, type Editor } from 'tldraw'
-import 'tldraw/tldraw.css'
+import { InfiniteCanvas, type CanvasController, type CanvasTool } from './InfiniteCanvas.js'
 
-import { AgentShapeUtil } from '../agent/AgentShapeUtil.js'
-
-// Custom shape utilities the editor registers. Module-scope constant so
-// the array identity is stable across renders.
-const SHAPE_UTILS = [AgentShapeUtil]
+export type { CanvasController, CanvasTool } from './InfiniteCanvas.js'
 
 export interface CanvasStageProps {
-	/**
-	 * Called once with the editor instance when tldraw mounts. The caller
-	 * stashes the ref and projects agent records onto the canvas.
-	 */
-	readonly onMount: (editor: Editor) => void
+	/** Scopes persisted card positions. */
+	readonly workspaceId: string
+	/** Active toolbar tool. */
+	readonly tool: CanvasTool
+	/** When true, every card renders full; otherwise density is automatic. */
+	readonly forceExpand: boolean
+	/** Receives the controller once, on mount. */
+	readonly onMount: (controller: CanvasController) => void
+	/** Called with the bare agent id when a card is double-clicked. */
+	readonly onShapeClick?: (agentId: string) => void
+	/** Reports the current zoom as a percentage for the zoom cluster. */
+	readonly onCameraChange?: (zoomPercent: number) => void
 }
 
-/** Render the infinite-canvas editor with the agent shape registered. */
-export default function CanvasStage({ onMount }: CanvasStageProps) {
-	return <Tldraw shapeUtils={SHAPE_UTILS} onMount={onMount} />
+/** Render the canvas surface. */
+export default function CanvasStage(props: CanvasStageProps) {
+	return (
+		<InfiniteCanvas
+			workspaceId={props.workspaceId}
+			tool={props.tool}
+			forceExpand={props.forceExpand}
+			onMount={props.onMount}
+			{...(props.onShapeClick ? { onShapeClick: props.onShapeClick } : {})}
+			{...(props.onCameraChange ? { onCameraChange: props.onCameraChange } : {})}
+		/>
+	)
 }

@@ -106,18 +106,6 @@ export function defaultCapabilities(): AgentCapabilities {
 }
 
 /**
- * Count how many capabilities are enabled. Useful for the badge in
- * the agent shape header ("3 capabilities").
- */
-export function capabilityCount(c: AgentCapabilities): number {
-	let n = 0
-	if (c.computer_use.enabled) n += 1
-	if (c.browser_use.enabled) n += 1
-	n += c.mcp_servers.length
-	return n
-}
-
-/**
  * One-line summary of enabled capabilities. Falls back to "no
  * capabilities" when nothing is enabled so the badge always has a
  * stable shape.

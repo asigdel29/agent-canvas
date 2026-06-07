@@ -25,11 +25,10 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Editor } from 'tldraw'
+import type { CanvasController, CanvasTool } from './canvas/CanvasStage.js'
 
-// The tldraw editor (~2 MB with its CSS) is the heaviest dependency and
-// is not needed on the sign-in / onboarding path. Load it on demand so
-// the initial bundle stays small; see canvas/CanvasStage.
+// The canvas surface loads on demand so the sign-in / onboarding path
+// ships none of it; see canvas/CanvasStage.
 const CanvasStage = lazy(() => import('./canvas/CanvasStage.js'))
 
 import {
@@ -157,8 +156,10 @@ export function App() {
 		'connected'
 	)
 	const [activeTool, setActiveTool] = useState<string>('select')
-	const [zoomPercent] = useState<number>(100)
-	const [density, setDensity] = useState<'compact' | 'full'>('full')
+	const [zoomPercent, setZoomPercent] = useState<number>(100)
+	// When true the zoom cluster forces every card full; otherwise the
+	// canvas collapses crowded cards automatically (density).
+	const [forceExpand, setForceExpand] = useState<boolean>(false)
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 	const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
 	const [feedbackOpen, setFeedbackOpen] = useState<boolean>(false)
@@ -168,7 +169,7 @@ export function App() {
 	const [agents, setAgents] = useState<readonly AgentApiRecord[]>([])
 	const [errorCards, setErrorCards] = useState<readonly ErrorCard[]>([])
 	const [liveApprovals, setLiveApprovals] = useState<readonly PendingApprovalDto[]>([])
-	const editorRef = useRef<Editor | null>(null)
+	const editorRef = useRef<CanvasController | null>(null)
 
 	const pushError = useCallback((card: Omit<ErrorCard, 'id'>) => {
 		const id = `e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -274,17 +275,20 @@ export function App() {
 		}
 	}, [agentApi, onboarded])
 
-	// When the tldraw editor mounts AND we have records, paint them on
-	// the canvas. Subsequent record additions go through createAgent.
+	// When the canvas mounts AND we have records, paint them on the
+	// canvas. Subsequent record additions go through createAgent.
 	const ensureShapesForRecords = useCallback(
-		(editor: Editor, records: readonly AgentApiRecord[], roomId: string) => {
-			for (const [i, record] of records.entries()) {
+		(editor: CanvasController, records: readonly AgentApiRecord[], roomId: string) => {
+			// Place each new card in the next free grid slot after the cards
+			// already present, so incremental creation never stacks shapes.
+			// A saved per-workspace layout overrides this in the store.
+			let slot = editor.getShapeCount()
+			for (const record of records) {
 				const shapeId = agentShapeId(record.id)
-				const existing = editor.getShape(shapeId as never)
-				if (existing) continue
-				// Lay out new shapes on a soft grid so they don't overlap.
-				const col = i % 3
-				const row = Math.floor(i / 3)
+				if (editor.getShape(shapeId as never)) continue
+				const col = slot % 3
+				const row = Math.floor(slot / 3)
+				slot += 1
 				editor.createShape({
 					id: shapeId as never,
 					type: 'agent',
@@ -752,10 +756,11 @@ export function App() {
 						{!showEmptyState && (
 							<ZoomCluster
 								zoomPercent={zoomPercent}
-								density={density}
-								onDensityToggle={() =>
-									setDensity((d) => (d === 'compact' ? 'full' : 'compact'))
-								}
+								density={forceExpand ? 'full' : 'compact'}
+								onZoomIn={() => editorRef.current?.zoomIn()}
+								onZoomOut={() => editorRef.current?.zoomOut()}
+								onZoomFit={() => editorRef.current?.zoomToFit()}
+								onDensityToggle={() => setForceExpand((v) => !v)}
 							/>
 						)}
 						{realtimeStatus === 'disconnected' && <DisconnectedBanner />}
@@ -778,6 +783,14 @@ export function App() {
 				) : (
 					<Suspense fallback={<CanvasLoading />}>
 						<CanvasStage
+							workspaceId={realtime.room}
+							tool={(activeTool === 'hand' ? 'hand' : 'select') as CanvasTool}
+							forceExpand={forceExpand}
+							onCameraChange={setZoomPercent}
+							onShapeClick={(agentId) => {
+								const record = agents.find((a) => a.id === agentId)
+								if (record) handleOpenEdit(record)
+							}}
 							onMount={(editor) => {
 								editorRef.current = editor
 								if (realtime) {
@@ -814,9 +827,9 @@ export function App() {
 }
 
 /**
- * Placeholder shown while the lazily-loaded tldraw editor chunk
- * downloads. Fills the canvas area on the app's dark surface so the
- * layout does not jump when the editor mounts.
+ * Placeholder shown while the lazily-loaded canvas chunk downloads.
+ * Fills the canvas area on the app's dark surface so the layout does
+ * not jump when the canvas mounts.
  */
 function CanvasLoading() {
 	return (
