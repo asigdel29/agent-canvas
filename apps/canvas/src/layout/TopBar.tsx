@@ -1,16 +1,16 @@
 /**
- * TopBar — workspace name on the left, collab/spend/share cluster on
- * the right. Mirrors Figma's persistent header in spatial layout.
+ * TopBar — workspace name on the left, collab/share cluster on the
+ * right. Mirrors Figma's persistent header in spatial layout.
  *
- *   [ ◇ Untitled workspace  · canvas / starter ]   [ $3.42 ] [ ●●● ] [ Share ▼ ]
+ *   [ ◇ Untitled workspace  · canvas / starter ]   [ ●●● ] [ Share ▼ ]
  *
  * The left cluster doubles as a breadcrumb so the user always knows
  * which workspace, project, and run-board they are looking at. The
- * right cluster carries always-visible affordances: spend pill,
- * presence avatars, and the primary Share dropdown.
+ * right cluster carries always-visible affordances: presence avatars
+ * and the primary Share dropdown.
  *
  * The TopBar is presentation-only. Real wiring (rename, navigate,
- * invite collaborators, change billing) belongs to the consumer.
+ * invite collaborators) belongs to the consumer.
  * @author asigdel29
  */
 
@@ -25,13 +25,6 @@ export interface TopBarProps {
 	readonly workspaceName: ReactNode
 	readonly breadcrumbs?: readonly string[]
 	readonly presenceAvatars?: readonly { id: string; label: string; color: string }[]
-	/**
-	 * Spend pill content. Pass null to hide. A string renders inside
-	 * a default neutral pill; a ReactNode renders verbatim so callers
-	 * can provide a richer component (e.g. SpendIndicator with progress
-	 * bar and colour state).
-	 */
-	readonly spend?: ReactNode | string | null
 	readonly onShareClick?: () => void
 	readonly onSettingsClick?: (() => void) | undefined
 	readonly onFeedbackClick?: (() => void) | undefined
@@ -41,7 +34,6 @@ export function TopBar({
 	workspaceName,
 	breadcrumbs = [],
 	presenceAvatars = [],
-	spend = null,
 	onShareClick,
 	onSettingsClick,
 	onFeedbackClick,
@@ -90,9 +82,6 @@ export function TopBar({
 					gap: 'var(--space-2)',
 				}}
 			>
-				{spend !== null && spend !== undefined && (
-					typeof spend === 'string' ? <SpendPill text={spend} /> : spend
-				)}
 				{presenceAvatars.length > 0 && <PresenceStack avatars={presenceAvatars} />}
 				{onFeedbackClick && <FeedbackTextButton onClick={onFeedbackClick} />}
 				{onSettingsClick && <SettingsIconButton onClick={onSettingsClick} />}
@@ -114,29 +103,6 @@ function WorkspaceMark() {
 		>
 			<rect x="2" y="2" width="12" height="12" transform="rotate(45 8 8)" fill="var(--text-strong)" />
 		</svg>
-	)
-}
-
-function SpendPill({ text }: { text: string }) {
-	return (
-		<div
-			aria-label="Workspace spend"
-			style={{
-				display: 'inline-flex',
-				alignItems: 'center',
-				gap: 'var(--space-1)',
-				height: 28,
-				padding: '0 var(--space-3)',
-				background: 'var(--surface-sunk)',
-				border: '1px solid var(--border)',
-				borderRadius: 'var(--radius-pill)',
-				fontSize: 'var(--font-12)',
-				fontVariantNumeric: 'tabular-nums',
-				color: 'var(--text-strong)',
-			}}
-		>
-			{text}
-		</div>
 	)
 }
 
