@@ -17,20 +17,21 @@
 
 export const TERMS_OF_SERVICE = `# Terms of Service
 
-_Last updated: 2026-05-25_
+_Last updated: 2026-06-08_
 
-These Terms govern your use of **agent-canvas** ("the Service"),
-operated by the team that deploys it ("we", "us"). By using the
-Service you agree to these Terms. If you disagree, stop using the
-Service.
+These Terms govern your use of **Agent Canvas** ("the Service"), the
+deployment at agents.sigdel.world, operated by asigdel29 ("we", "us").
+By using the Service you agree to these Terms. If you disagree, stop
+using the Service.
 
 ## 1. What the Service is
 
-agent-canvas is an infinite-canvas workspace for running Claude-
-driven AI agents with computer use, browser use, and Model
-Context Protocol (MCP) tool servers. The Service orchestrates
-agents but does not provide the underlying AI model. You bring
-your own Anthropic API key.
+Agent Canvas is an infinite-canvas workspace for running AI agents
+with computer use, browser use, and Model Context Protocol (MCP) tool
+servers. The Service runs the agents but does not provide the AI model
+itself — you bring your own model key (Anthropic, or any OpenAI-
+compatible provider such as OpenAI, Gemini, Groq, OpenRouter, or a
+local server).
 
 ## 2. Your account
 
@@ -74,13 +75,14 @@ You will not use the Service to:
 You provide your own credentials for Anthropic, OpenAI-compatible
 providers, E2B, and any MCP servers your agents connect to. Your
 model API keys are held in your browser's memory only — never
-written to disk or browser storage — and sent to our orchestrator
+written to disk or browser storage — and sent to our server
 on each request via HTTP headers. They are cleared when you reload
 or close the tab, and we do not persist them.
 
-If you supply a hosted-deployment environment variable instead
-(e.g. via Vercel project settings), that key lives in your
-deployment environment and is your responsibility to rotate.
+If the operator instead supplies a shared key as a server
+environment variable (e.g. in the Railway service settings), that
+key lives in the server's environment and is the operator's
+responsibility to rotate.
 
 ## 6. Data we keep
 
@@ -96,7 +98,7 @@ We do not record:
 - Your API keys (held in browser memory only, never sent to our database)
 - The content of your prompts beyond what is in the audit log
 
-Data lives in Postgres (hosted via Neon) and is encrypted at
+Data lives in Postgres (hosted on Railway) and is encrypted at
 rest by the provider.
 
 ## 7. Data we share
@@ -146,11 +148,11 @@ Questions: open an issue at github.com/asigdel29/agent-canvas.
 
 export const PRIVACY_POLICY = `# Privacy Policy
 
-_Last updated: 2026-05-25_
+_Last updated: 2026-06-08_
 
-This policy describes what data **agent-canvas** ("the Service")
-collects, why, and how to delete it. It applies to any deployment
-of the open-source code base.
+This policy describes what data **Agent Canvas** ("the Service", the
+deployment at agents.sigdel.world) collects, why, and how to delete
+it. It applies to any deployment of the open-source code base.
 
 ## What we collect
 
@@ -169,8 +171,9 @@ of the open-source code base.
 
 **Operational:**
 
-- Server logs (timestamps, status codes, latency, error stacks)
-  via Vercel's default platform logs
+- Server logs (timestamps, status codes, latency, errors) from the
+  server host (Railway). Error messages are logged server-side and
+  not returned to your browser.
 - Anonymous funnel events (login_started, agent_created, etc.)
   via PostHog when the canvas is deployed with VITE_POSTHOG_KEY
   set. The distinct id is a per-tab random uuid, not tied to
@@ -192,29 +195,30 @@ of the open-source code base.
 
 | Service | What it stores |
 |---|---|
-| Vercel | Server runtime + platform logs |
-| Neon (Postgres) | Persistent records: users, workspaces, agents, audit_log, event_log |
-| Upstash Redis | Single-use SSE token nonces (cross-instance replay protection); expires in 120s |
-| Anthropic | Your prompts, when an agent run sends them — governed by Anthropic's API policies |
+| Vercel | Serves the static board (CDN) + its access logs |
+| Railway | Runs the server + its platform logs, and hosts the Postgres database |
+| Postgres (on Railway) | Persistent records: users, workspaces, agents, audit_log, event_log |
+| Your model provider | Your prompts, when an agent run sends them — governed by that provider's API policies (e.g. Anthropic, OpenAI) |
 | E2B | Computer-use VM sessions (only when you enable computer_use) |
+| Upstash Redis | Single-use SSE token nonces (only when configured; otherwise kept in memory) |
 | Sentry | Error reports (only when SENTRY_DSN is configured) |
 | PostHog | Funnel events (only when VITE_POSTHOG_KEY is configured) |
 
-All providers above are SOC 2 Type II audited at the time of
-this writing (May 2026). Verify before relying on this claim
-for compliance purposes.
+Check each provider's own status and policies before relying on
+this list for compliance purposes.
 
 ## Data flow during agent runs
 
-1. Your browser sends a run request with your API key in a header
-2. The orchestrator forwards the request to Anthropic with that key
-3. Anthropic returns tool calls; the orchestrator dispatches them
-4. Tool results stream back to your browser via SSE
+1. Your browser sends a run request with your model key in a header
+2. The server forwards the request to the model provider you chose
+   for that agent, with your key
+3. The provider returns tool calls; the server dispatches them
+4. Tool results stream back to your browser live (SSE)
 5. Each step is recorded in the audit log keyed to your user id
 
-Your Claude key transits our orchestrator on every request but
-is not persisted there. Anthropic sees your prompts in cleartext
-per their API.
+Your model key passes through our server on every request but is
+not stored there. Your chosen provider sees your prompts per its
+own API terms.
 
 ## Your rights (GDPR / CCPA)
 
