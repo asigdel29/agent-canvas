@@ -232,6 +232,16 @@ export function NewAgentModal({
 
 	function submit() {
 		if (!canSubmit) return
+		// Drop MCP rows that were added but never filled in, and trim the
+		// rest. Without this an empty "Add server" row reaches the API as
+		// an invalid mcp_servers[n].url and the create fails with a
+		// confusing validation error.
+		const cleanedCapabilities: AgentCapabilities = {
+			...capabilities,
+			mcp_servers: capabilities.mcp_servers
+				.map((s) => ({ ...s, id: s.id.trim(), url: s.url.trim() }))
+				.filter((s) => s.url.length > 0),
+		}
 		const draft: NewAgentDraft = {
 			name: name.trim(),
 			purpose: purpose.trim(),
@@ -239,7 +249,7 @@ export function NewAgentModal({
 			model: model.trim(),
 			model_base_url: provider === 'openai' ? baseUrl.trim() || null : null,
 			system_prompt: systemPrompt.trim(),
-			capabilities,
+			capabilities: cleanedCapabilities,
 		}
 		if (isEditing && onSave) {
 			onSave(draft)
