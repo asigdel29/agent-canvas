@@ -55,7 +55,6 @@ import {
 	ONBOARDING_STORAGE_KEY,
 } from './onboarding/OnboardingWizard.js'
 import { Login } from './auth/Login.js'
-import { SpendIndicator } from './spend/SpendBanner.js'
 import { Shell } from './layout/Shell.js'
 import { TopBar } from './layout/TopBar.js'
 import { LeftRail, type RailItem } from './layout/LeftRail.js'
@@ -611,7 +610,6 @@ export function App() {
 				onComplete={(result) => {
 					track('onboarding_step_done', {
 						providers: result.providers.length,
-						daily_budget_usd: Math.round(result.daily_budget_micros / 1_000_000),
 					})
 					setOnboarded(true)
 				}}
@@ -663,9 +661,6 @@ export function App() {
 								color: 'var(--accent)',
 							},
 						]}
-						spend={
-							<SpendIndicator accrued_micros={3_420_000} ceiling_micros={50_000_000} />
-						}
 						onSettingsClick={() => {
 							setSettingsOpen((s) => {
 								if (!s) track('settings_opened')

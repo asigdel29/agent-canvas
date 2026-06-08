@@ -1,19 +1,18 @@
 /**
- * OnboardingWizard — first-run, four steps:
+ * OnboardingWizard — first-run, three steps:
  *
  *   1. Welcome      what is this product, two-line pitch
  *   2. Connect      connect GitHub
- *   3. Budget       set a daily spend ceiling
- *   4. Done         summary + 'Enter canvas' button
+ *   3. Done         summary + 'Enter canvas' button
  *
  * The wizard never blocks: the user can hit "Skip for now" on any
  * step and land on an empty canvas. We persist completion to
- * localStorage under ONBOARDING_KEY so a refresh after step 4 takes
+ * localStorage under ONBOARDING_KEY so a refresh after step 3 takes
  * them straight to the canvas.
  *
  * State machine is local; the parent receives the wizard output
- * (connected provider, daily budget micros) via onComplete and is
- * responsible for forwarding it to the orchestrator.
+ * (connected providers) via onComplete and is responsible for
+ * forwarding it to the orchestrator.
  * @author asigdel29
  */
 
@@ -22,11 +21,10 @@ import type { StarterProvider } from './EmptyState.js'
 
 export const ONBOARDING_STORAGE_KEY = 'agent-canvas:onboarded'
 
-export type OnboardingStep = 'welcome' | 'connect' | 'budget' | 'done'
+export type OnboardingStep = 'welcome' | 'connect' | 'done'
 
 export interface OnboardingResult {
 	readonly providers: readonly StarterProvider[]
-	readonly daily_budget_micros: number
 }
 
 export interface OnboardingWizardProps {
@@ -39,16 +37,9 @@ const PROVIDERS: { id: StarterProvider; label: string; tagline: string }[] = [
 	{ id: 'github', label: 'GitHub', tagline: 'Issues, PRs, reviews' },
 ]
 
-const BUDGET_PRESETS: { label: string; micros: number }[] = [
-	{ label: '$10 / day', micros: 10_000_000 },
-	{ label: '$50 / day', micros: 50_000_000 },
-	{ label: '$200 / day', micros: 200_000_000 },
-]
-
 export function OnboardingWizard({ displayName, onComplete, onSkip }: OnboardingWizardProps) {
 	const [step, setStep] = useState<OnboardingStep>('welcome')
 	const [selectedProviders, setSelectedProviders] = useState<Set<StarterProvider>>(new Set())
-	const [budgetMicros, setBudgetMicros] = useState<number>(BUDGET_PRESETS[1]!.micros)
 
 	function finish() {
 		try {
@@ -59,7 +50,6 @@ export function OnboardingWizard({ displayName, onComplete, onSkip }: Onboarding
 		}
 		onComplete({
 			providers: Array.from(selectedProviders),
-			daily_budget_micros: budgetMicros,
 		})
 	}
 
@@ -114,26 +104,16 @@ export function OnboardingWizard({ displayName, onComplete, onSkip }: Onboarding
 							else next.add(id)
 							setSelectedProviders(next)
 						}}
-						onNext={() => setStep('budget')}
-						onBack={() => setStep('welcome')}
-						onSkip={skip}
-					/>
-				)}
-				{step === 'budget' && (
-					<BudgetStep
-						value={budgetMicros}
-						onChange={setBudgetMicros}
 						onNext={() => setStep('done')}
-						onBack={() => setStep('connect')}
+						onBack={() => setStep('welcome')}
 						onSkip={skip}
 					/>
 				)}
 				{step === 'done' && (
 					<DoneStep
 						providers={Array.from(selectedProviders)}
-						budgetMicros={budgetMicros}
 						onEnter={finish}
-						onBack={() => setStep('budget')}
+						onBack={() => setStep('connect')}
 					/>
 				)}
 			</section>
@@ -142,14 +122,14 @@ export function OnboardingWizard({ displayName, onComplete, onSkip }: Onboarding
 }
 
 function StepIndicator({ current }: { current: OnboardingStep }) {
-	const order: OnboardingStep[] = ['welcome', 'connect', 'budget', 'done']
+	const order: OnboardingStep[] = ['welcome', 'connect', 'done']
 	const index = order.indexOf(current)
 	return (
 		<div
 			aria-label="Progress"
 			style={{
 				display: 'grid',
-				gridTemplateColumns: 'repeat(4, 1fr)',
+				gridTemplateColumns: 'repeat(3, 1fr)',
 				gap: 4,
 			}}
 		>
@@ -275,73 +255,12 @@ function ProviderTile({
 	)
 }
 
-function BudgetStep({
-	value,
-	onChange,
-	onNext,
-	onBack,
-	onSkip,
-}: {
-	value: number
-	onChange: (micros: number) => void
-	onNext: () => void
-	onBack: () => void
-	onSkip: () => void
-}) {
-	return (
-		<div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-			<header style={{ display: 'grid', gap: 'var(--space-2)' }}>
-				<h1 style={{ margin: 0, fontSize: 'var(--font-20)', fontWeight: 500 }}>
-					Set a daily spend ceiling
-				</h1>
-				<p style={{ margin: 0, fontSize: 'var(--font-13)', color: 'var(--text-muted)' }}>
-					Hard cap. When a run would exceed today's budget, the orchestrator blocks the
-					command and surfaces an approval card. Adjust any time in settings.
-				</p>
-			</header>
-			<div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-2)' }}>
-				{BUDGET_PRESETS.map((p) => (
-					<button
-						key={p.micros}
-						type="button"
-						onClick={() => onChange(p.micros)}
-						aria-pressed={value === p.micros}
-						style={{
-							padding: 'var(--space-3) var(--space-2)',
-							background: value === p.micros ? 'var(--accent-soft)' : 'var(--surface-elev)',
-							border: `1px solid ${value === p.micros ? 'var(--accent)' : 'var(--border)'}`,
-							borderRadius: 'var(--radius-md)',
-							color: 'var(--text-strong)',
-							font: 'inherit',
-							fontFamily: 'var(--font-ui)',
-							fontSize: 'var(--font-14)',
-							fontWeight: 500,
-							cursor: 'pointer',
-						}}
-					>
-						{p.label}
-					</button>
-				))}
-			</div>
-			<Footer
-				onPrimary={onNext}
-				primaryLabel="Continue"
-				onSecondary={onBack}
-				secondaryLabel="Back"
-				onSkip={onSkip}
-			/>
-		</div>
-	)
-}
-
 function DoneStep({
 	providers,
-	budgetMicros,
 	onEnter,
 	onBack,
 }: {
 	providers: readonly StarterProvider[]
-	budgetMicros: number
 	onEnter: () => void
 	onBack: () => void
 }) {
@@ -360,7 +279,6 @@ function DoneStep({
 					label="Tools queued"
 					value={providers.length > 0 ? providers.join(', ') : 'none yet'}
 				/>
-				<Row label="Daily budget" value={`$${(budgetMicros / 1_000_000).toFixed(2)}`} />
 			</dl>
 			<Footer
 				onPrimary={onEnter}
