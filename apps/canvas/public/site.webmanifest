@@ -1,0 +1,13 @@
+{
+  "name": "Agent Canvas",
+  "short_name": "Agent Canvas",
+  "description": "A shared, zoomable board where you run AI agents and watch them work.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/favicon.ico", "type": "image/x-icon", "sizes": "16x16 32x32" }
+  ]
+}
