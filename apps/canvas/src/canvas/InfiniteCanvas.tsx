@@ -31,6 +31,26 @@ import { decideDensity, type RenderMode } from '../agent/density.js'
 import { AgentCard } from './AgentCard.js'
 import type { CanvasShape } from './agentShape.js'
 import { CanvasStore, type CanvasEditor } from './canvasStore.js'
+import { createCanvasCollab, type CanvasCollab, type PresenceState } from './collab.js'
+
+/** A peer's live cursor, in world coordinates, for the overlay. */
+interface RemoteCursor {
+	readonly id: number
+	readonly name: string
+	readonly color: string
+	readonly x: number
+	readonly y: number
+}
+
+/** A present collaborator, surfaced to the app for the presence stack. */
+export interface PresencePeer {
+	readonly id: string
+	readonly label: string
+	readonly color: string
+}
+
+/** Throttle window for broadcasting the local cursor over awareness. */
+const CURSOR_BROADCAST_MS = 50
 
 /** The camera: `(x, y)` is the world point at the viewport's top-left. */
 interface Camera {
@@ -62,6 +82,17 @@ export interface InfiniteCanvasProps {
 	readonly onShapeClick?: (agentId: string) => void
 	/** Reports the current zoom as a percentage for the zoom cluster. */
 	readonly onCameraChange?: (zoomPercent: number) => void
+	/** Orchestrator base URL — opens the collaborative session when set. */
+	readonly orchestratorUrl?: string | undefined
+	/** Session JWT used to authenticate the collaborative WebSocket. */
+	readonly session?: string | undefined
+	/** This user's display label and cursor colour for presence. */
+	readonly userLabel?: string | undefined
+	readonly userColor?: string | undefined
+	/** Read-only viewers see peers but never publish layout changes. */
+	readonly readOnly?: boolean | undefined
+	/** Reports the live set of present collaborators (including self). */
+	readonly onPresenceChange?: ((peers: readonly PresencePeer[]) => void) | undefined
 }
 
 const MIN_ZOOM = 0.1
@@ -101,8 +132,17 @@ export function InfiniteCanvas({
 	onMount,
 	onShapeClick,
 	onCameraChange,
+	orchestratorUrl,
+	session,
+	userLabel,
+	userColor,
+	readOnly,
+	onPresenceChange,
 }: InfiniteCanvasProps) {
 	const store = useMemo(() => new CanvasStore(workspaceId), [workspaceId])
+	const [remoteCursors, setRemoteCursors] = useState<readonly RemoteCursor[]>([])
+	const collabRef = useRef<CanvasCollab | null>(null)
+	const lastCursorBroadcast = useRef(0)
 	const shapes = useSyncExternalStore(store.subscribe, store.getSnapshot)
 	const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, z: 1 })
 	const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
@@ -151,6 +191,91 @@ export function InfiniteCanvas({
 		onMount(controller)
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [store])
+
+	// Stable refs for values the collab effect reads but should not
+	// re-subscribe on (a new inline callback or label every render).
+	const onPresenceRef = useRef(onPresenceChange)
+	onPresenceRef.current = onPresenceChange
+	const userLabelRef = useRef(userLabel)
+	userLabelRef.current = userLabel
+	const userColorRef = useRef(userColor)
+	userColorRef.current = userColor
+
+	// Collaborative session: shared layout + presence/cursors. Opens once
+	// per (workspace, session); falls back to single-player when it can't
+	// connect.
+	useEffect(() => {
+		if (!orchestratorUrl || !session || !workspaceId) return
+		let disposed = false
+		let detachShared: (() => void) | null = null
+		let detachAwareness: (() => void) | null = null
+		void (async () => {
+			const collab = await createCanvasCollab({ workspaceId, orchestratorUrl, session })
+			if (!collab) return
+			if (disposed) {
+				collab.dispose()
+				return
+			}
+			collabRef.current = collab
+			detachShared = store.attachSharedPositions(collab.positions, !readOnly)
+
+			const awareness = collab.awareness
+			awareness.setLocalStateField('user', {
+				name: userLabelRef.current ?? 'You',
+				color: userColorRef.current ?? '#8888ff',
+			})
+
+			const recompute = () => {
+				const cursors: RemoteCursor[] = []
+				const peers: PresencePeer[] = []
+				awareness.getStates().forEach((raw, clientId) => {
+					const state = raw as Partial<PresenceState>
+					if (state.user) {
+						peers.push({ id: String(clientId), label: state.user.name, color: state.user.color })
+					}
+					if (clientId !== awareness.clientID && state.cursor && state.user) {
+						cursors.push({
+							id: clientId,
+							name: state.user.name,
+							color: state.user.color,
+							x: state.cursor.x,
+							y: state.cursor.y,
+						})
+					}
+				})
+				setRemoteCursors(cursors)
+				onPresenceRef.current?.(peers)
+			}
+			awareness.on('change', recompute)
+			detachAwareness = () => awareness.off('change', recompute)
+			recompute()
+		})()
+		return () => {
+			disposed = true
+			detachShared?.()
+			detachAwareness?.()
+			collabRef.current?.dispose()
+			collabRef.current = null
+			setRemoteCursors([])
+			onPresenceRef.current?.([])
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [store, workspaceId, orchestratorUrl, session, readOnly])
+
+	/** Broadcast the local cursor (world coords) over awareness, throttled. */
+	function broadcastCursor(e: { clientX: number; clientY: number }): void {
+		const collab = collabRef.current
+		if (!collab) return
+		const now = Date.now()
+		if (now - lastCursorBroadcast.current < CURSOR_BROADCAST_MS) return
+		lastCursorBroadcast.current = now
+		const p = localPoint(e)
+		const cam = cameraRef.current
+		collab.awareness.setLocalStateField('cursor', {
+			x: cam.x + p.x / cam.z,
+			y: cam.y + p.y / cam.z,
+		})
+	}
 
 	// Track the space bar for temporary panning regardless of tool.
 	useEffect(() => {
@@ -209,6 +334,7 @@ export function InfiniteCanvas({
 	}
 
 	function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+		broadcastCursor(e)
 		const it = interaction.current
 		if (it.kind === 'pan') {
 			const dx = e.clientX - it.startX
@@ -344,6 +470,7 @@ export function InfiniteCanvas({
 			onPointerDown={onPointerDown}
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerUp}
+			onPointerLeave={() => collabRef.current?.awareness.setLocalStateField('cursor', null)}
 			onWheel={onWheel}
 			onDoubleClick={onDoubleClick}
 			onKeyDown={onKeyDown}
@@ -411,6 +538,63 @@ export function InfiniteCanvas({
 					}}
 				/>
 			)}
+
+			{remoteCursors.map((c) => (
+				<RemoteCursorMarker
+					key={c.id}
+					name={c.name}
+					color={c.color}
+					left={(c.x - camera.x) * camera.z}
+					top={(c.y - camera.y) * camera.z}
+				/>
+			))}
+		</div>
+	)
+}
+
+/** A peer's cursor rendered in screen space so it stays a constant size. */
+function RemoteCursorMarker({
+	name,
+	color,
+	left,
+	top,
+}: {
+	name: string
+	color: string
+	left: number
+	top: number
+}) {
+	return (
+		<div
+			aria-hidden="true"
+			style={{
+				position: 'absolute',
+				left,
+				top,
+				transform: 'translate(-2px, -2px)',
+				pointerEvents: 'none',
+				zIndex: 5,
+			}}
+		>
+			<svg width="16" height="16" viewBox="0 0 16 16" style={{ display: 'block' }}>
+				<path d="M1 1 L1 12 L4.5 8.8 L7 14 L9 13 L6.5 8 L11 8 Z" fill={color} stroke="white" strokeWidth="1" />
+			</svg>
+			<span
+				style={{
+					position: 'absolute',
+					left: 14,
+					top: 0,
+					padding: '1px 6px',
+					borderRadius: 'var(--radius-pill)',
+					background: color,
+					color: 'white',
+					fontSize: 11,
+					fontFamily: 'var(--font-ui)',
+					whiteSpace: 'nowrap',
+				}}
+			>
+				{name}
+			</span>
 		</div>
 	)
 }

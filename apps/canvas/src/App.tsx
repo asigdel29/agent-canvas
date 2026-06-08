@@ -25,7 +25,7 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CanvasController, CanvasTool } from './canvas/CanvasStage.js'
+import type { CanvasController, CanvasTool, PresencePeer } from './canvas/CanvasStage.js'
 
 // The canvas surface loads on demand so the sign-in / onboarding path
 // ships none of it; see canvas/CanvasStage.
@@ -152,6 +152,25 @@ function readShareTokenFromUrl(): string | null {
 	return new URL(window.location.href).searchParams.get('share')
 }
 
+/** Presence/cursor palette — distinct, legible hues keyed by handle. */
+const PRESENCE_COLORS = [
+	'#4f8cff',
+	'#ff6b9d',
+	'#27c498',
+	'#f5a623',
+	'#a06bff',
+	'#ff5d5d',
+	'#3ec5d8',
+	'#c0ca33',
+] as const
+
+/** Deterministically pick a presence colour for a handle. */
+function colorForHandle(handle: string): string {
+	let hash = 0
+	for (let i = 0; i < handle.length; i += 1) hash = (hash * 31 + handle.charCodeAt(i)) | 0
+	return PRESENCE_COLORS[Math.abs(hash) % PRESENCE_COLORS.length]!
+}
+
 /** The access level of the current share session, if any. */
 function readShareRole(): 'viewer' | 'member' | null {
 	try {
@@ -182,6 +201,7 @@ export function App() {
 	const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
 	const [feedbackOpen, setFeedbackOpen] = useState<boolean>(false)
 	const [shareOpen, setShareOpen] = useState<boolean>(false)
+	const [presencePeers, setPresencePeers] = useState<readonly PresencePeer[]>([])
 	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
 	const [agentModalInitial, setAgentModalInitial] = useState<NewAgentDraft | null>(null)
 	const [agentModalEditingId, setAgentModalEditingId] = useState<string | null>(null)
@@ -742,13 +762,17 @@ export function App() {
 							/>
 						}
 						breadcrumbs={readOnly ? ['canvas', 'view only'] : ['canvas']}
-						presenceAvatars={[
-							{
-								id: realtime.handle ?? 'u',
-								label: realtime.handle ?? 'You',
-								color: 'var(--accent)',
-							},
-						]}
+						presenceAvatars={
+							presencePeers.length > 0
+								? presencePeers.map((p) => ({ id: p.id, label: p.label, color: p.color }))
+								: [
+										{
+											id: realtime.handle ?? 'u',
+											label: realtime.handle ?? 'You',
+											color: colorForHandle(realtime.handle ?? 'You'),
+										},
+									]
+						}
 						onSettingsClick={() => {
 							setSettingsOpen((s) => {
 								if (!s) track('settings_opened')
@@ -875,6 +899,12 @@ export function App() {
 							workspaceId={realtime.room}
 							tool={(activeTool === 'hand' ? 'hand' : 'select') as CanvasTool}
 							forceExpand={forceExpand}
+							orchestratorUrl={ORCHESTRATOR_URL}
+							session={realtime.session}
+							userLabel={realtime.handle ?? 'You'}
+							userColor={colorForHandle(realtime.handle ?? 'You')}
+							readOnly={readOnly}
+							onPresenceChange={setPresencePeers}
 							onCameraChange={setZoomPercent}
 							onShapeClick={(agentId) => {
 								const record = agents.find((a) => a.id === agentId)

@@ -42,6 +42,11 @@ const routes: Route[] = [
 	{ id: 'health', match: exact('/api/health', ['GET']), load: () => import('./health.js') },
 	{ id: 'commands', match: exact('/api/commands', ['POST']), load: () => import('./commands.js') },
 	{
+		id: 'auth/yjs-token',
+		match: exact('/api/auth/yjs-token', ['POST']),
+		load: () => import('./auth/yjs-token.js'),
+	},
+	{
 		id: 'auth/sse-token',
 		match: exact('/api/auth/sse-token', ['POST']),
 		load: () => import('./auth/sse-token.js'),

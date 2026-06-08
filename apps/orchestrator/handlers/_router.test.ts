@@ -26,6 +26,7 @@ describe('matchRoute — happy-path resolution', () => {
 		['GET', '/api/health', 'health'],
 		['POST', '/api/commands', 'commands'],
 		['POST', '/api/auth/sse-token', 'auth/sse-token'],
+		['POST', '/api/auth/yjs-token', 'auth/yjs-token'],
 		['GET', '/api/auth/config', 'auth/config'],
 		['POST', '/api/auth/anon-session', 'auth/anon-session'],
 		['GET', '/api/auth/login/github', 'auth/login/github'],

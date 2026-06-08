@@ -37,6 +37,8 @@ import {
 	writeWebResponseToNode,
 } from './httpBridge.js'
 import { logger } from '../dist/observability/logger.js'
+import { attachYjsWebSocketServer } from '../dist/yjs/yjsServer.js'
+import { createYjsPersistence } from '../dist/yjs/yjsPersistence.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url)) // apps/orchestrator/scripts
 const ORCH_ROOT = resolve(HERE, '..') // apps/orchestrator
@@ -180,6 +182,13 @@ const server = createServer(async (rawReq: IncomingMessage, rawRes: ServerRespon
 		return
 	}
 	await serveStatic(pathname, rawRes)
+})
+
+// Collaborative-canvas realtime: a WebSocket endpoint on the same
+// process, authenticated with the room-scoped SSE token.
+attachYjsWebSocketServer(server, {
+	secret: process.env['SSE_TOKEN_SECRET']!,
+	persistence: createYjsPersistence(),
 })
 
 server.listen(PORT, () => {

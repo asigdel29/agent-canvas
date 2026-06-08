@@ -49,6 +49,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { loadRoute } from '../handlers/_router.js'
+import { attachYjsWebSocketServer } from '../dist/yjs/yjsServer.js'
+import { createYjsPersistence } from '../dist/yjs/yjsPersistence.js'
 import {
 	loadDotEnvIfPresent,
 	nodeRequestToWebRequest,
@@ -189,6 +191,11 @@ const server = createServer(async (rawReq, rawRes) => {
 		rawRes.setHeader('content-type', 'application/json')
 		rawRes.end(JSON.stringify({ error: 'internal_error' }))
 	}
+})
+
+attachYjsWebSocketServer(server, {
+	secret: process.env['SSE_TOKEN_SECRET']!,
+	persistence: createYjsPersistence(),
 })
 
 server.listen(PORT, () => {

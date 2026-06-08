@@ -8,9 +8,14 @@
  * @author asigdel29
  */
 
-import { InfiniteCanvas, type CanvasController, type CanvasTool } from './InfiniteCanvas.js'
+import {
+	InfiniteCanvas,
+	type CanvasController,
+	type CanvasTool,
+	type PresencePeer,
+} from './InfiniteCanvas.js'
 
-export type { CanvasController, CanvasTool } from './InfiniteCanvas.js'
+export type { CanvasController, CanvasTool, PresencePeer } from './InfiniteCanvas.js'
 
 export interface CanvasStageProps {
 	/** Scopes persisted card positions. */
@@ -25,6 +30,17 @@ export interface CanvasStageProps {
 	readonly onShapeClick?: (agentId: string) => void
 	/** Reports the current zoom as a percentage for the zoom cluster. */
 	readonly onCameraChange?: (zoomPercent: number) => void
+	/** Orchestrator base URL — enables the collaborative session. */
+	readonly orchestratorUrl?: string | undefined
+	/** Session JWT for the collaborative WebSocket. */
+	readonly session?: string | undefined
+	/** This user's display label and cursor colour. */
+	readonly userLabel?: string | undefined
+	readonly userColor?: string | undefined
+	/** Read-only viewers see peers but never publish layout changes. */
+	readonly readOnly?: boolean | undefined
+	/** Reports the live set of present collaborators. */
+	readonly onPresenceChange?: ((peers: readonly PresencePeer[]) => void) | undefined
 }
 
 /** Render the canvas surface. */
@@ -35,6 +51,12 @@ export default function CanvasStage(props: CanvasStageProps) {
 			tool={props.tool}
 			forceExpand={props.forceExpand}
 			onMount={props.onMount}
+			orchestratorUrl={props.orchestratorUrl}
+			session={props.session}
+			userLabel={props.userLabel}
+			userColor={props.userColor}
+			readOnly={props.readOnly}
+			onPresenceChange={props.onPresenceChange}
 			{...(props.onShapeClick ? { onShapeClick: props.onShapeClick } : {})}
 			{...(props.onCameraChange ? { onCameraChange: props.onCameraChange } : {})}
 		/>

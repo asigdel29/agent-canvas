@@ -13,13 +13,30 @@
  *
  * Card positions are persisted per workspace in `localStorage`, so a
  * reload restores the user's arrangement instead of re-flowing to the
- * default grid. Positions are the only canvas state persisted; everything
- * else is re-projected from the orchestrator on load.
+ * default grid. When a collaborative session attaches a
+ * {@link SharedPositions} layer (Yjs, see collab.ts), that layer becomes
+ * authoritative: local drags write to it and remote moves apply live,
+ * while `localStorage` stays a warm offline cache. Positions are the
+ * only canvas state shared; everything else is re-projected from the
+ * orchestrator on load.
  *
  * @author asigdel29
  */
 
 import type { AgentShapeProps, CanvasShape } from './agentShape.js'
+
+/**
+ * The shared, multiplayer view of card positions. Backed by a Yjs map in
+ * a live session; kept as a minimal interface so the store does not
+ * depend on Yjs directly.
+ */
+export interface SharedPositions {
+	get(id: string): { x: number; y: number } | undefined
+	set(id: string, pos: { x: number; y: number }): void
+	entries(): ReadonlyArray<readonly [string, { x: number; y: number }]>
+	/** Subscribe to remote changes; the callback receives the changed ids. */
+	observe(onChange: (changedIds: readonly string[]) => void): () => void
+}
 
 /** Input to {@link CanvasEditor.createShape}. */
 export interface CreateShapeInput {
@@ -65,6 +82,9 @@ export class CanvasStore {
 	private readonly listeners = new Set<() => void>()
 	private snapshot: readonly CanvasShape[] = []
 	private readonly savedPositions: PositionMap
+	private shared: SharedPositions | null = null
+	private sharedCanWrite = true
+	private unobserveShared: (() => void) | null = null
 
 	/**
 	 * @param workspaceId scopes persisted positions; an empty id disables
@@ -72,6 +92,64 @@ export class CanvasStore {
 	 */
 	constructor(private readonly workspaceId: string) {
 		this.savedPositions = this.loadPositions()
+	}
+
+	/**
+	 * Attach a shared (multiplayer) position layer. Reconciles current
+	 * shapes with what peers already have, seeds the layer with any
+	 * positions only this client knows, and starts applying remote moves.
+	 *
+	 * @param shared   the Yjs-backed shared positions.
+	 * @param canWrite whether this client may publish moves (false for a
+	 *   read-only viewer, who still sees everyone else's layout).
+	 * @returns a detach function that stops observing remote changes.
+	 */
+	attachSharedPositions(shared: SharedPositions, canWrite: boolean): () => void {
+		this.unobserveShared?.()
+		this.shared = shared
+		this.sharedCanWrite = canWrite
+
+		// Remote wins for any shape peers already placed; for the rest, we
+		// contribute our local position so nothing the user arranged offline
+		// is lost on first connect.
+		for (const [id, pos] of shared.entries()) {
+			const s = this.shapes.get(id)
+			if (s) this.shapes.set(id, { ...s, x: pos.x, y: pos.y })
+			this.savedPositions[id] = { x: pos.x, y: pos.y }
+		}
+		if (canWrite) {
+			for (const [id, s] of this.shapes) {
+				if (!shared.get(id)) shared.set(id, { x: s.x, y: s.y })
+			}
+		}
+		this.unobserveShared = shared.observe((ids) => this.applyRemotePositions(ids))
+		this.persistPositions()
+		this.commit()
+
+		return () => {
+			this.unobserveShared?.()
+			this.unobserveShared = null
+			this.shared = null
+		}
+	}
+
+	/** Apply remote position changes for the given shape ids. */
+	private applyRemotePositions(ids: readonly string[]): void {
+		if (!this.shared) return
+		let changed = false
+		for (const id of ids) {
+			const pos = this.shared.get(id)
+			if (!pos) continue
+			const s = this.shapes.get(id)
+			if (!s) continue
+			if (s.x === pos.x && s.y === pos.y) continue
+			this.shapes.set(id, { ...s, x: pos.x, y: pos.y })
+			this.savedPositions[id] = { x: pos.x, y: pos.y }
+			changed = true
+		}
+		if (!changed) return
+		this.persistPositions()
+		this.commit()
 	}
 
 	/** Register a change listener; returns an unsubscribe function. */
@@ -89,7 +167,10 @@ export class CanvasStore {
 		getShapeCount: () => this.shapes.size,
 		createShape: (input) => {
 			if (this.shapes.has(input.id)) return
-			const saved = this.savedPositions[input.id]
+			// Position priority: a peer's shared position, then this
+			// client's saved layout, then the caller's default placement.
+			const shared = this.shared?.get(input.id)
+			const saved = shared ?? this.savedPositions[input.id]
 			this.shapes.set(input.id, {
 				id: input.id,
 				type: input.type,
@@ -97,6 +178,11 @@ export class CanvasStore {
 				y: saved ? saved.y : input.y,
 				props: input.props,
 			})
+			// A brand-new shape this client placed is published so peers
+			// converge on the same spot.
+			if (!shared && this.shared && this.sharedCanWrite) {
+				this.shared.set(input.id, { x: saved ? saved.x : input.x, y: saved ? saved.y : input.y })
+			}
 			this.commit()
 		},
 		updateShape: (input) => {
@@ -129,7 +215,14 @@ export class CanvasStore {
 			const existing = this.shapes.get(move.id)
 			if (!existing) continue
 			this.shapes.set(move.id, { ...existing, x: move.x, y: move.y })
-			if (persist) this.savedPositions[move.id] = { x: move.x, y: move.y }
+			if (persist) {
+				this.savedPositions[move.id] = { x: move.x, y: move.y }
+				// Publish the settled position to peers (drag-end only), unless
+				// this client is a read-only viewer.
+				if (this.shared && this.sharedCanWrite) {
+					this.shared.set(move.id, { x: move.x, y: move.y })
+				}
+			}
 			changed = true
 		}
 		if (!changed) return
