@@ -37,6 +37,25 @@ export interface MemberRow {
 	readonly membership: MembershipSummary
 }
 
+/** Roles a share link can grant (subset of WorkspaceRole). */
+export type ShareRole = 'viewer' | 'member'
+
+export interface ShareLinkSummary {
+	readonly id: string
+	readonly workspace_id: string
+	readonly created_by_user_id: string
+	readonly role: ShareRole
+	readonly expires_at: string | null
+	readonly revoked_at: string | null
+	readonly created_at: string
+}
+
+/** A freshly minted link, paired with its raw token (shown once). */
+export interface CreatedShareLink {
+	readonly link: ShareLinkSummary
+	readonly token: string
+}
+
 export class WorkspaceApiError extends Error {
 	constructor(
 		readonly status: number,
@@ -144,6 +163,33 @@ export class WorkspaceApi {
 	async remove(workspace_id: string, user_id: string): Promise<void> {
 		const res = await fetch(
 			`${this.opts.baseUrl}/api/workspaces/${encodeURIComponent(workspace_id)}/members/${encodeURIComponent(user_id)}`,
+			{ method: 'DELETE', headers: this.headers() }
+		)
+		await throwOnError(res)
+	}
+
+	async listShareLinks(workspace_id: string): Promise<readonly ShareLinkSummary[]> {
+		const res = await fetch(
+			`${this.opts.baseUrl}/api/workspaces/${encodeURIComponent(workspace_id)}/share-links`,
+			{ headers: this.headers() }
+		)
+		await throwOnError(res)
+		const body = (await res.json()) as { items: ShareLinkSummary[] }
+		return body.items
+	}
+
+	async createShareLink(workspace_id: string, role: ShareRole): Promise<CreatedShareLink> {
+		const res = await fetch(
+			`${this.opts.baseUrl}/api/workspaces/${encodeURIComponent(workspace_id)}/share-links`,
+			{ method: 'POST', headers: this.headers(true), body: JSON.stringify({ role }) }
+		)
+		await throwOnError(res)
+		return (await res.json()) as CreatedShareLink
+	}
+
+	async revokeShareLink(workspace_id: string, link_id: string): Promise<void> {
+		const res = await fetch(
+			`${this.opts.baseUrl}/api/workspaces/${encodeURIComponent(workspace_id)}/share-links/${encodeURIComponent(link_id)}`,
 			{ method: 'DELETE', headers: this.headers() }
 		)
 		await throwOnError(res)

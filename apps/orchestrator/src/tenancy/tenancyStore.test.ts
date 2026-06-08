@@ -277,5 +277,70 @@ describe('requireMembership — AUTH_MODE=open', () => {
 	})
 })
 
+describe('share links', () => {
+	async function freshWorkspace() {
+		const s = new InMemoryTenancyStore()
+		const owner = await s.upsertGithubUser(GH('owner'))
+		const ws = await s.createWorkspace('W', owner.id)
+		return { s, owner, ws }
+	}
+
+	it('mints a link, returns a token once, and lists it', async () => {
+		const { s, owner, ws } = await freshWorkspace()
+		const { record, token } = await s.createShareLink(ws.id, owner.id, 'viewer', null)
+		expect(token).toMatch(/^[A-Za-z0-9_-]{20,}$/)
+		expect(record.role).toBe('viewer')
+		const list = await s.listShareLinks(ws.id)
+		expect(list.map((l) => l.id)).toContain(record.id)
+	})
+
+	it('redeems a valid token into a synthetic member with the link role', async () => {
+		const { s, owner, ws } = await freshWorkspace()
+		const { record, token } = await s.createShareLink(ws.id, owner.id, 'member', null)
+		const redemption = await s.redeemShareToken(token)
+		expect(redemption).not.toBeNull()
+		expect(redemption!.workspace_id).toBe(ws.id)
+		expect(redemption!.role).toBe('member')
+		expect(redemption!.share_user_id).toBe(`share:${record.id}`)
+		// The principal can now pass the membership gate at its role.
+		const m = await s.requireMembership(redemption!.share_user_id, ws.id, 'member')
+		expect(m.role).toBe('member')
+	})
+
+	it('hides synthetic share principals from the member roster', async () => {
+		const { s, owner, ws } = await freshWorkspace()
+		const { token } = await s.createShareLink(ws.id, owner.id, 'member', null)
+		await s.redeemShareToken(token)
+		const members = await s.listMembers(ws.id)
+		expect(members.every((m) => !m.user.id.startsWith('share:'))).toBe(true)
+		expect(members).toHaveLength(1) // just the owner
+	})
+
+	it('revoking a link severs the principal access immediately', async () => {
+		const { s, owner, ws } = await freshWorkspace()
+		const { record, token } = await s.createShareLink(ws.id, owner.id, 'viewer', null)
+		const redemption = await s.redeemShareToken(token)
+		expect(await s.revokeShareLink(ws.id, record.id)).toBe(true)
+		await expect(
+			s.requireMembership(redemption!.share_user_id, ws.id, 'viewer')
+		).rejects.toBeInstanceOf(TenancyForbiddenError)
+		// A revoked token no longer redeems.
+		expect(await s.redeemShareToken(token)).toBeNull()
+		// And it drops out of the active listing.
+		expect(await s.listShareLinks(ws.id)).toHaveLength(0)
+	})
+
+	it('rejects an expired token', async () => {
+		const { s, owner, ws } = await freshWorkspace()
+		const { token } = await s.createShareLink(ws.id, owner.id, 'viewer', -1)
+		expect(await s.redeemShareToken(token)).toBeNull()
+	})
+
+	it('returns null for an unknown token', async () => {
+		const { s } = await freshWorkspace()
+		expect(await s.redeemShareToken('nope')).toBeNull()
+	})
+})
+
 // Silence unused-import lint for the few helpers we still reference indirectly.
 void TenancyNotFoundError

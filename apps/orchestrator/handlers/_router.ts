@@ -124,6 +124,16 @@ const routes: Route[] = [
 		load: () => import('./workspaces/members.js'),
 	},
 	{
+		id: 'workspaces/share-links',
+		match: rx(/^\/api\/workspaces\/[^/]+\/share-links(?:\/[^/]+)?$/, ['GET', 'POST', 'DELETE']),
+		load: () => import('./workspaces/share-links.js'),
+	},
+	{
+		id: 'share/redeem',
+		match: exact('/api/share/redeem', ['POST']),
+		load: () => import('./share/redeem.js'),
+	},
+	{
 		id: 'admin/webhooks/drain',
 		match: exact('/api/admin/webhooks/drain', ['POST']),
 		load: () => import('./admin/webhooks/drain.js'),

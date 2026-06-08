@@ -27,6 +27,10 @@ export const WORKSPACE_AUDIT_ACTIONS = [
 	'member.role_changed', // details: { user_id, from_role, to_role }
 	'member.removed', // details: { user_id, prior_role }
 
+	// Share links
+	'share_link.created', // details: { role }
+	'share_link.revoked', // details: {}
+
 	// Workspace itself
 	'workspace.created', // details: { name }
 	'workspace.renamed', // details: { from_name, to_name }
@@ -39,6 +43,7 @@ export const WORKSPACE_AUDIT_TARGET_TYPES = [
 	'webhook_endpoint',
 	'workspace_member',
 	'workspace',
+	'share_link',
 ] as const
 
 export type WorkspaceAuditTargetType = (typeof WORKSPACE_AUDIT_TARGET_TYPES)[number]

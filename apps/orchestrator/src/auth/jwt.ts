@@ -32,6 +32,17 @@ export interface SessionClaims {
 	 * different workspace_id when the user picks another one.
 	 */
 	readonly workspace_id?: string
+	/**
+	 * Set when this session was minted by redeeming a share link
+	 * (POST /api/share/redeem) rather than a login. `share_link_id`
+	 * identifies the originating link; `share_role` is the granted
+	 * access level. These are informational — the real gate is the
+	 * synthetic principal's workspace_members row, which revocation
+	 * removes — so the client can switch to read-only without trusting
+	 * an unsigned source.
+	 */
+	readonly share_link_id?: string
+	readonly share_role?: 'viewer' | 'member'
 }
 
 export class JwtVerificationError extends Error {

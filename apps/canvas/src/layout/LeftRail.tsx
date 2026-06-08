@@ -123,28 +123,30 @@ function TabStrip({
 					count={runsCount}
 				/>
 			</div>
-			<button
-				type="button"
-				onClick={onNewWorkflow}
-				aria-label="New workflow"
-				title="New workflow"
-				style={{
-					width: 24,
-					height: 24,
-					padding: 0,
-					display: 'inline-flex',
-					alignItems: 'center',
-					justifyContent: 'center',
-					background: 'transparent',
-					border: '1px solid var(--border)',
-					borderRadius: 'var(--radius-md)',
-					color: 'var(--text-strong)',
-					cursor: 'pointer',
-					fontFamily: 'var(--font-ui)',
-				}}
-			>
-				+
-			</button>
+			{onNewWorkflow && (
+				<button
+					type="button"
+					onClick={onNewWorkflow}
+					aria-label="New workflow"
+					title="New workflow"
+					style={{
+						width: 24,
+						height: 24,
+						padding: 0,
+						display: 'inline-flex',
+						alignItems: 'center',
+						justifyContent: 'center',
+						background: 'transparent',
+						border: '1px solid var(--border)',
+						borderRadius: 'var(--radius-md)',
+						color: 'var(--text-strong)',
+						cursor: 'pointer',
+						fontFamily: 'var(--font-ui)',
+					}}
+				>
+					+
+				</button>
+			)}
 		</div>
 	)
 }

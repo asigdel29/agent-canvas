@@ -61,6 +61,42 @@ export interface MembershipRecord {
 }
 
 /**
+ * Roles a share link can grant. Deliberately a subset of
+ * WorkspaceRole: a public link never confers admin or owner, so a
+ * leaked link cannot escalate to managing members or deleting the
+ * workspace.
+ */
+export type ShareRole = Extract<WorkspaceRole, 'viewer' | 'member'>
+
+/**
+ * A tokenized link granting access to one workspace at one role.
+ * Mirrors the migration-011 share_links table. The raw token is never
+ * part of this record — only its hash is stored, and the plaintext is
+ * surfaced once at creation.
+ */
+export interface ShareLinkRecord {
+	readonly id: string
+	readonly workspace_id: WorkspaceId
+	readonly created_by_user_id: UserId
+	readonly role: ShareRole
+	readonly expires_at: string | null
+	readonly revoked_at: string | null
+	readonly created_at: string
+}
+
+/**
+ * The outcome of redeeming a valid share token: the workspace it
+ * unlocks, the granted role, and the synthetic principal the caller
+ * should mint a session for.
+ */
+export interface ShareRedemption {
+	readonly link_id: string
+	readonly workspace_id: WorkspaceId
+	readonly role: ShareRole
+	readonly share_user_id: UserId
+}
+
+/**
  * Inputs to upsertFromGitHub, the path the OAuth callback uses to
  * land a fresh login. Idempotent: a second call updates
  * last_seen_at + any nullable fields that arrived this time.

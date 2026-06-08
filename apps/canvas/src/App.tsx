@@ -55,6 +55,7 @@ import {
 	ONBOARDING_STORAGE_KEY,
 } from './onboarding/OnboardingWizard.js'
 import { Login } from './auth/Login.js'
+import { ShareModal } from './share/ShareModal.js'
 import { Shell } from './layout/Shell.js'
 import { TopBar } from './layout/TopBar.js'
 import { LeftRail, type RailItem } from './layout/LeftRail.js'
@@ -77,6 +78,8 @@ const MAX_LIVE_EVENTS = 50
 const SESSION_STORAGE_KEY = 'agent-canvas:session'
 const ROOM_STORAGE_KEY = 'agent-canvas:room'
 const HANDLE_STORAGE_KEY = 'agent-canvas:handle'
+/** Access level of a share-link session ('viewer' | 'member'); absent for logins. */
+const SHARE_ROLE_STORAGE_KEY = 'agent-canvas:share_role'
 
 /**
  * 20 attempts (~9.5min at the 30s max-backoff cap) before we give
@@ -143,6 +146,22 @@ function readOnboardedFlag(): boolean {
 	}
 }
 
+/** The `?share=<token>` value from the URL, if a share link is being opened. */
+function readShareTokenFromUrl(): string | null {
+	if (typeof window === 'undefined') return null
+	return new URL(window.location.href).searchParams.get('share')
+}
+
+/** The access level of the current share session, if any. */
+function readShareRole(): 'viewer' | 'member' | null {
+	try {
+		const r = window.sessionStorage.getItem(SHARE_ROLE_STORAGE_KEY)
+		return r === 'viewer' || r === 'member' ? r : null
+	} catch {
+		return null
+	}
+}
+
 function readCancelledFlag(): boolean {
 	if (typeof window === 'undefined') return false
 	return new URL(window.location.href).searchParams.get('auth') === 'cancelled'
@@ -162,6 +181,7 @@ export function App() {
 	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 	const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
 	const [feedbackOpen, setFeedbackOpen] = useState<boolean>(false)
+	const [shareOpen, setShareOpen] = useState<boolean>(false)
 	const [agentModalOpen, setAgentModalOpen] = useState<boolean>(false)
 	const [agentModalInitial, setAgentModalInitial] = useState<NewAgentDraft | null>(null)
 	const [agentModalEditingId, setAgentModalEditingId] = useState<string | null>(null)
@@ -178,9 +198,67 @@ export function App() {
 		setErrorCards((prev) => prev.filter((c) => c.id !== id))
 	}, [])
 
-	const realtime = useMemo(() => intakeAndStashCredentials(), [])
+	const [realtime, setRealtime] = useState(() => intakeAndStashCredentials())
 	const [onboarded, setOnboarded] = useState<boolean>(readOnboardedFlag)
 	const cancelled = useMemo(() => readCancelledFlag(), [])
+
+	// Read-only when this session came from a "view" share link. The
+	// gate is informational for the UI; the orchestrator independently
+	// enforces the granted role on every mutating call.
+	const [shareRole, setShareRole] = useState<'viewer' | 'member' | null>(readShareRole)
+	const readOnly = shareRole === 'viewer'
+
+	// Share-link intake. When the URL carries `?share=<token>` and we
+	// have no session yet, redeem it for a scoped session, stash it like
+	// a login, and drop the token from the URL. Share visitors skip
+	// onboarding. Runs once on mount.
+	const [shareBooting, setShareBooting] = useState<boolean>(
+		() => !intakeAndStashCredentials() && Boolean(readShareTokenFromUrl())
+	)
+	const [shareFailed, setShareFailed] = useState<boolean>(false)
+	useEffect(() => {
+		if (realtime) return
+		const token = readShareTokenFromUrl()
+		if (!token) return
+		let cancelledRedeem = false
+		void (async () => {
+			try {
+				const res = await fetch(`${ORCHESTRATOR_URL}/api/share/redeem`, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ token }),
+				})
+				if (!res.ok) throw new Error('redeem_failed')
+				const body = (await res.json()) as {
+					session: string
+					room: string
+					role: 'viewer' | 'member'
+				}
+				if (cancelledRedeem) return
+				try {
+					window.sessionStorage.setItem(SESSION_STORAGE_KEY, body.session)
+					window.sessionStorage.setItem(ROOM_STORAGE_KEY, body.room)
+					window.sessionStorage.setItem(SHARE_ROLE_STORAGE_KEY, body.role)
+				} catch {
+					// sessionStorage disabled; the session still lives in state.
+				}
+				const url = new URL(window.location.href)
+				url.searchParams.delete('share')
+				window.history.replaceState({}, '', url.toString())
+				setShareRole(body.role)
+				setRealtime({ room: body.room, session: body.session, handle: null })
+				setOnboarded(true)
+			} catch {
+				if (!cancelledRedeem) setShareFailed(true)
+			} finally {
+				if (!cancelledRedeem) setShareBooting(false)
+			}
+		})()
+		return () => {
+			cancelledRedeem = true
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// First mount with a real session counts as a completed login.
 	// Fires once per fresh tab; intakeAndStashCredentials strips the
@@ -222,12 +300,13 @@ export function App() {
 	}, [realtime, onboarded])
 
 	// Open the New Agent modal when the user picks the Agent tool.
+	// Read-only (view-share) sessions cannot create agents.
 	useEffect(() => {
 		if (activeTool === 'agent') {
-			setAgentModalOpen(true)
+			if (!readOnly) setAgentModalOpen(true)
 			setActiveTool('select')
 		}
-	}, [activeTool])
+	}, [activeTool, readOnly])
 
 	function handleConnect(provider: StarterProvider) {
 		setConnectors((prev) => [
@@ -601,6 +680,15 @@ export function App() {
 
 	// Routing.
 	if (!realtime) {
+		if (shareBooting) return <FullScreenNotice title="Opening shared canvas…" />
+		if (shareFailed) {
+			return (
+				<FullScreenNotice
+					title="This link isn't valid."
+					detail="It may have been revoked or expired. Ask whoever shared it for a new one."
+				/>
+			)
+		}
 		return <Login orchestratorUrl={ORCHESTRATOR_URL} cancelled={cancelled} />
 	}
 	if (!onboarded) {
@@ -653,7 +741,7 @@ export function App() {
 								}}
 							/>
 						}
-						breadcrumbs={['canvas']}
+						breadcrumbs={readOnly ? ['canvas', 'view only'] : ['canvas']}
 						presenceAvatars={[
 							{
 								id: realtime.handle ?? 'u',
@@ -668,6 +756,7 @@ export function App() {
 							})
 						}}
 						onFeedbackClick={() => setFeedbackOpen(true)}
+						{...(readOnly ? {} : { onShareClick: () => setShareOpen(true) })}
 					/>
 				}
 				leftRail={
@@ -677,7 +766,7 @@ export function App() {
 							runs={runItems}
 							selectedId={selectedRunId}
 							onSelect={setSelectedRunId}
-							onNewWorkflow={() => setAgentModalOpen(true)}
+							{...(readOnly ? {} : { onNewWorkflow: () => setAgentModalOpen(true) })}
 						/>
 						<ConnectorStrip
 							tiles={connectors}
@@ -764,12 +853,17 @@ export function App() {
 			>
 				{showEmptyState ? (
 					<EmptyState
-						onConnect={handleConnect}
+						onConnect={(provider) => {
+							if (readOnly) return
+							handleConnect(provider)
+						}}
 						onCreateAgent={() => {
+							if (readOnly) return
 							setAgentModalInitial(null)
 							setAgentModalOpen(true)
 						}}
 						onPickStarter={(starter) => {
+							if (readOnly) return
 							setAgentModalInitial(starter.draft)
 							setAgentModalOpen(true)
 							track('agent_starter_picked', { starter_id: starter.id })
@@ -815,7 +909,46 @@ export function App() {
 				recentEvents={liveEvents.slice(-20) as unknown as Record<string, unknown>[]}
 				onClose={() => setFeedbackOpen(false)}
 			/>
+			<ShareModal
+				open={shareOpen}
+				orchestratorUrl={ORCHESTRATOR_URL}
+				session={realtime.session}
+				workspaceId={effectiveWorkspaceId}
+				onClose={() => setShareOpen(false)}
+			/>
 		</>
+	)
+}
+
+/**
+ * Full-screen centered message on the app surface. Used for the brief
+ * states that precede a session: redeeming a share link, or a share
+ * link that turned out to be invalid.
+ */
+function FullScreenNotice({ title, detail }: { title: string; detail?: string }) {
+	return (
+		<div
+			role="status"
+			style={{
+				position: 'fixed',
+				inset: 0,
+				display: 'grid',
+				placeItems: 'center',
+				background: 'var(--surface)',
+				color: 'var(--text-strong)',
+				padding: 'var(--space-5)',
+				fontFamily: 'var(--font-ui)',
+			}}
+		>
+			<div style={{ display: 'grid', gap: 'var(--space-2)', textAlign: 'center', maxWidth: 420 }}>
+				<span style={{ fontSize: 'var(--font-16)', fontWeight: 500 }}>{title}</span>
+				{detail && (
+					<span style={{ fontSize: 'var(--font-13)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+						{detail}
+					</span>
+				)}
+			</div>
+		</div>
 	)
 }
 

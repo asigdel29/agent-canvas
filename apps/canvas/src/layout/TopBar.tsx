@@ -85,7 +85,7 @@ export function TopBar({
 				{presenceAvatars.length > 0 && <PresenceStack avatars={presenceAvatars} />}
 				{onFeedbackClick && <FeedbackTextButton onClick={onFeedbackClick} />}
 				{onSettingsClick && <SettingsIconButton onClick={onSettingsClick} />}
-				<ShareButton onClick={onShareClick} />
+				{onShareClick && <ShareButton onClick={onShareClick} />}
 			</div>
 		</div>
 	)
