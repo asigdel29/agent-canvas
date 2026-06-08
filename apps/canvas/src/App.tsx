@@ -812,8 +812,6 @@ export function App() {
 			/>
 			<FeedbackModal
 				open={feedbackOpen}
-				orchestratorUrl={ORCHESTRATOR_URL}
-				session={realtime.session}
 				recentEvents={liveEvents.slice(-20) as unknown as Record<string, unknown>[]}
 				onClose={() => setFeedbackOpen(false)}
 			/>

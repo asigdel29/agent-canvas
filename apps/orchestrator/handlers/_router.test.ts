@@ -32,7 +32,6 @@ describe('matchRoute — happy-path resolution', () => {
 		['GET', '/api/auth/github/callback', 'auth/github/callback'],
 		['GET', '/api/agents', 'agents/index'],
 		['POST', '/api/agents', 'agents/index'],
-		['POST', '/api/feedback', 'feedback'],
 		['GET', '/api/tokens', 'tokens/index'],
 		['DELETE', '/api/tokens/tok_123', 'tokens/[id]'],
 		['GET', '/api/approvals', 'approvals/index'],

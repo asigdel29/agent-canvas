@@ -81,7 +81,6 @@ const routes: Route[] = [
 		match: exact('/api/agents/probe-mcp', ['POST']),
 		load: () => import('./agents/probe-mcp.js'),
 	},
-	{ id: 'feedback', match: exact('/api/feedback', ['POST']), load: () => import('./feedback.js') },
 	{
 		id: 'tokens/index',
 		match: exact('/api/tokens', ['GET', 'POST']),

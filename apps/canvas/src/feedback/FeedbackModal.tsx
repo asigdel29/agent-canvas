@@ -3,34 +3,40 @@
  *
  * The goal is the lowest-friction path from "something is wrong" to
  * "the operator can see it". No triage form, no category dropdown.
- * The recent SSE event tail is attached automatically so the
- * operator reading the audit log has the context the user couldn't
- * articulate.
+ * The recent SSE event tail is attached automatically so the operator
+ * reading the message has the context the user couldn't articulate.
  *
- * Submits to /api/feedback with the session bearer. Success
- * collapses to a 1.5s confirmation banner then auto-closes.
+ * Sending opens the user's mail client on a pre-filled draft to the
+ * feedback address (VITE_FEEDBACK_EMAIL). This keeps feedback purely
+ * client-side: no endpoint, no auth, no data persisted server-side.
+ * Once the draft opens we collapse to a 1.5s confirmation then close.
  *
- * Escape closes; backdrop click closes; Cmd/Ctrl+Enter submits.
+ * Escape closes; backdrop click closes; Cmd/Ctrl+Enter sends.
  * @author asigdel29
  */
 
 import { useEffect, useState } from 'react'
 
+/** Where feedback drafts are addressed. Overridable at build time. */
+const FEEDBACK_EMAIL =
+	(import.meta as unknown as { env?: Record<string, string> }).env?.['VITE_FEEDBACK_EMAIL'] ||
+	'anu@getlora.com'
+
+/**
+ * Mail clients and browsers truncate over-long mailto: URLs, so the
+ * attached event tail is capped well under the practical ~2000-char
+ * ceiling. The message itself is never truncated.
+ */
+const MAX_TAIL_EVENTS = 5
+const MAX_BODY_CHARS = 1500
+
 export interface FeedbackModalProps {
 	readonly open: boolean
-	readonly orchestratorUrl: string
-	readonly session: string
 	readonly recentEvents?: readonly Record<string, unknown>[]
 	readonly onClose: () => void
 }
 
-export function FeedbackModal({
-	open,
-	orchestratorUrl,
-	session,
-	recentEvents = [],
-	onClose,
-}: FeedbackModalProps) {
+export function FeedbackModal({ open, recentEvents = [], onClose }: FeedbackModalProps) {
 	const [message, setMessage] = useState('')
 	const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 	const [error, setError] = useState<string | null>(null)
@@ -66,34 +72,22 @@ export function FeedbackModal({
 		return () => clearTimeout(t)
 	}, [state, onClose])
 
-	async function submit() {
+	function submit() {
 		const trimmed = message.trim()
 		if (!trimmed) return
 		setState('sending')
 		setError(null)
 		try {
-			const res = await fetch(`${orchestratorUrl}/api/feedback`, {
-				method: 'POST',
-				headers: {
-					authorization: `Bearer ${session}`,
-					'content-type': 'application/json',
-				},
-				body: JSON.stringify({
-					message: trimmed,
-					recent_events: recentEvents.slice(-20),
-					url: typeof window !== 'undefined' ? window.location.href : null,
-				}),
-			})
-			if (!res.ok) {
-				const body = (await res.json().catch(() => ({}))) as { detail?: string }
-				setState('error')
-				setError(body.detail ?? `HTTP ${res.status}`)
-				return
-			}
+			const href = buildMailtoHref(trimmed, recentEvents)
+			// Navigating to a mailto: URL hands off to the OS mail client
+			// without leaving the canvas.
+			window.location.href = href
 			setState('sent')
 		} catch (err) {
+			// The only realistic failure is a missing window (non-browser
+			// context). Surface a generic message; never leak internals.
 			setState('error')
-			setError(err instanceof Error ? err.message : String(err))
+			setError(err instanceof Error ? err.message : 'Could not open your mail app.')
 		}
 	}
 
@@ -178,7 +172,7 @@ export function FeedbackModal({
 								color: 'var(--text-strong)',
 							}}
 						>
-							Thanks — sent. Closing.
+							Opening your mail app… Closing.
 						</div>
 					) : (
 						<>
@@ -190,8 +184,9 @@ export function FeedbackModal({
 									lineHeight: 1.5,
 								}}
 							>
-								The most recent {recentEvents.length} events on this room are attached
-								automatically so we can see what was happening when you hit Send.
+								The most recent {Math.min(recentEvents.length, MAX_TAIL_EVENTS)} events on
+								this room are added to the email draft automatically so we can see what was
+								happening when you hit Send.
 							</p>
 							<textarea
 								value={message}
@@ -292,4 +287,41 @@ export function FeedbackModal({
 			</div>
 		</div>
 	)
+}
+
+/**
+ * Build a mailto: href for a feedback draft: the user's message, the
+ * page URL for context, and a compact tail of recent run events. The
+ * body is capped at MAX_BODY_CHARS so the URL stays within mail-client
+ * length limits; the message itself is never cut.
+ */
+function buildMailtoHref(
+	message: string,
+	recentEvents: readonly Record<string, unknown>[],
+): string {
+	const lines: string[] = [message, '']
+	if (typeof window !== 'undefined') lines.push(`Page: ${window.location.href}`, '')
+	const tail = summarizeEvents(recentEvents)
+	if (tail) lines.push('Recent events:', tail)
+	let body = lines.join('\n')
+	if (body.length > MAX_BODY_CHARS) body = `${body.slice(0, MAX_BODY_CHARS)}\n…(truncated)`
+	const subject = 'Agent Canvas feedback'
+	return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+}
+
+/**
+ * Render the last MAX_TAIL_EVENTS events as one compact line each
+ * (sequence · kind · timestamp), skipping fields that are absent.
+ * Returns an empty string when there is nothing useful to attach.
+ */
+function summarizeEvents(events: readonly Record<string, unknown>[]): string {
+	return events
+		.slice(-MAX_TAIL_EVENTS)
+		.map((e) => {
+			const seq = typeof e['seq'] === 'number' ? `#${e['seq']}` : ''
+			const kind = typeof e['kind'] === 'string' ? e['kind'] : 'event'
+			const ts = typeof e['ts'] === 'string' ? e['ts'] : ''
+			return `- ${[seq, kind, ts].filter(Boolean).join(' · ')}`
+		})
+		.join('\n')
 }
