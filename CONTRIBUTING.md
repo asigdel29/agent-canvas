@@ -1,7 +1,7 @@
 # Contributing
 
 PRs accepted. By contributing you agree to license your work under the
-[MIT License](LICENSE).
+[GNU Affero General Public License v3.0](LICENSE).
 
 ## Getting started
 
