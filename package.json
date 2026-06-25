@@ -24,11 +24,11 @@
     "setup:env": "node ./scripts/setup-env.mjs"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.0.1",
     "concurrently": "^10.0.3",
     "prettier": "^3.8.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   },
   "engines": {
     "node": ">=22.0.0"
