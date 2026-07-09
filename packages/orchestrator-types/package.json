@@ -22,8 +22,8 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   },
   "license": "AGPL-3.0-only"
 }
