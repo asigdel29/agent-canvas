@@ -20,12 +20,12 @@
     "@agent-canvas/connector-core": "*",
     "@agent-canvas/orchestrator-types": "*",
     "@e2b/desktop": "^2.3.1",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "playwright": "^1.60.0",
     "postgres": "^3.4.0"
   },
   "devDependencies": {
-    "tsx": "^4.23.0",
+    "tsx": "^4.23.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
