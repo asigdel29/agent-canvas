@@ -19,15 +19,15 @@
   "dependencies": {
     "@agent-canvas/connector-core": "*",
     "@agent-canvas/orchestrator-types": "*",
-    "@e2b/desktop": "^2.3.1",
+    "@e2b/desktop": "^2.3.2",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "playwright": "^1.60.0",
     "postgres": "^3.4.0"
   },
   "devDependencies": {
-    "tsx": "^4.23.5",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "license": "AGPL-3.0-only"
 }
