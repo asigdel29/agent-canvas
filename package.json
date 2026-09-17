@@ -24,7 +24,7 @@
     "setup:env": "node ./scripts/setup-env.mjs"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.1",
     "concurrently": "^10.0.5",
     "prettier": "^3.9.6",
     "typescript": "^7.0.2",

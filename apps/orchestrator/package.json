@@ -19,7 +19,7 @@
   "dependencies": {
     "@agent-canvas/connector-core": "*",
     "@agent-canvas/orchestrator-types": "*",
-    "@e2b/desktop": "^2.3.3",
+    "@e2b/desktop": "^2.4.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "playwright": "^1.60.0",
     "postgres": "^3.4.0"
